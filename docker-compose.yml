@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  asterisk:
+    platform: linux/amd64
+    image: mlan/asterisk:full
+    network_mode: host                    # Only here to help testing
+    cap_add:
+      - sys_ptrace                          # Only here to help testing
+      - net_admin                           # Allow NFT, used by AutoBan
+      - net_raw                             # Allow NFT, used by AutoBan
+    environment:
+      - SYSLOG_LEVEL=${SYSLOG_LEVEL-4}      # Logging
+      - HOSTNAME=asterisk.docker.localhost
+    volumes:
+      - asterisk-conf:/srv                      # Persistent storage
+      - ./asterisk/container-config:/etc/asterisk
+      - ./pulse:/run/pulse:rshared          # Use host audio
+      - /etc/localtime:/etc/localtime:ro    # Use host timezone
+
+volumes:
+  asterisk-conf:                                # Persistent storage
