@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	"github.com/CyCoreSystems/audiosocket"
@@ -45,7 +45,7 @@ func main() {
 	if fileName == "" {
 		fileName = "test.slin"
 	}
-	audioData, err = ioutil.ReadFile(fileName)
+	audioData, err = os.ReadFile(fileName)
 	if err != nil {
 		log.Fatalln("failed to read audio file:", err)
 	}
@@ -95,14 +95,21 @@ func Handle(pCtx context.Context, c net.Conn) {
 	}
 	log.Printf("processing call %s", id.String())
 
-	go processDataFromAsterisk(ctx, cancel, c)
+	// Channel to signal end of user speaking
+	userStoppedSpeaking := make(chan struct{})
+	defer close(userStoppedSpeaking)
+
+	// Start listening for user speech
+	go listenForSpeech(ctx, cancel, c, userStoppedSpeaking)
+
+	// Wait for user to stop speaking
+	<-userStoppedSpeaking
 
 	log.Println("sending audio")
 	if err = sendAudio(c, audioData); err != nil {
 		log.Println("failed to send audio to Asterisk:", err)
 	}
 	log.Println("completed audio send")
-	return
 }
 
 func getCallID(c net.Conn) (uuid.UUID, error) {
@@ -118,18 +125,20 @@ func getCallID(c net.Conn) (uuid.UUID, error) {
 	return uuid.FromBytes(m.Payload())
 }
 
-func processDataFromAsterisk(ctx context.Context, cancel context.CancelFunc, in io.Reader) {
-	var err error
-	var m audiosocket.Message
-
+func listenForSpeech(ctx context.Context, cancel context.CancelFunc, c net.Conn, userStoppedSpeaking chan<- struct{}) {
 	defer cancel()
 
+	//var m audiosocket.Message
 	for ctx.Err() == nil {
-		m, err = audiosocket.NextMessage(in)
+		m, err := audiosocket.NextMessage(c)
 		if errors.Cause(err) == io.EOF {
 			log.Println("audiosocket closed")
 			return
+		} else if err != nil {
+			log.Println("error reading message:", err)
+			return
 		}
+
 		switch m.Kind() {
 		case audiosocket.KindHangup:
 			log.Println("audiosocket received hangup command")
@@ -137,10 +146,16 @@ func processDataFromAsterisk(ctx context.Context, cancel context.CancelFunc, in 
 		case audiosocket.KindError:
 			log.Println("error from audiosocket")
 		case audiosocket.KindSlin:
-			if m.ContentLength() < 1 {
-				log.Println("no audio data")
+			// Check if there is audio data, indicating the user is speaking
+			println("Content Length: ", m.ContentLength())
+			if m.ContentLength() > 0 {
+				log.Println("User is speaking...")
+			} else {
+				log.Println("User stopped speaking")
+				// Signal that the user has stopped speaking
+				userStoppedSpeaking <- struct{}{}
+				return
 			}
-		default:
 		}
 	}
 }
