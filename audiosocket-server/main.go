@@ -2,21 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"io"
 	"log"
+	"math"
 	"net"
 	"os"
 	"time"
 
 	"github.com/CyCoreSystems/audiosocket"
-	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 )
 
 // MaxCallDuration is the maximum amount of time to allow a call to be up before it is terminated.
 const MaxCallDuration = 2 * time.Minute
 
-const listenAddr = ":8080"
+const listenAddr = ":8081"
 const languageCode = "en-US"
 
 // slinChunkSize is the number of bytes which should be sent per Slin
@@ -25,6 +26,11 @@ const languageCode = "en-US"
 //
 // This is based on 8kHz, 20ms, 16-bit signed linear.
 const slinChunkSize = 320 // 8000Hz * 20ms * 2 bytes
+
+const (
+	silenceThreshold = 500             // Umbral de silencio (ajusta según sea necesario)
+	silenceDuration  = 3 * time.Second // Duración mínima del silencio
+)
 
 var fileName string
 
@@ -112,25 +118,29 @@ func Handle(pCtx context.Context, c net.Conn) {
 	log.Println("completed audio send")
 }
 
-func getCallID(c net.Conn) (uuid.UUID, error) {
-	m, err := audiosocket.NextMessage(c)
-	if err != nil {
-		return uuid.Nil, err
-	}
+// func getCallID(c net.Conn) (uuid.UUID, error) {
+// 	m, err := audiosocket.NextMessage(c)
+// 	if err != nil {
+// 		return uuid.Nil, err
+// 	}
 
-	if m.Kind() != audiosocket.KindID {
-		return uuid.Nil, errors.Errorf("invalid message type %d getting CallID", m.Kind())
-	}
+// 	if m.Kind() != audiosocket.KindID {
+// 		return uuid.Nil, errors.Errorf("invalid message type %d getting CallID", m.Kind())
+// 	}
 
-	return uuid.FromBytes(m.Payload())
-}
+// 	return uuid.FromBytes(m.Payload())
+// }
 
 func listenForSpeech(ctx context.Context, cancel context.CancelFunc, c net.Conn, userStoppedSpeaking chan<- struct{}) {
 	defer cancel()
 
+	var silenceStart time.Time
+	detectingSilence := false
+
 	//var m audiosocket.Message
 	for ctx.Err() == nil {
 		m, err := audiosocket.NextMessage(c)
+
 		if errors.Cause(err) == io.EOF {
 			log.Println("audiosocket closed")
 			return
@@ -147,17 +157,48 @@ func listenForSpeech(ctx context.Context, cancel context.CancelFunc, c net.Conn,
 			log.Println("error from audiosocket")
 		case audiosocket.KindSlin:
 			// Check if there is audio data, indicating the user is speaking
-			println("Content Length: ", m.ContentLength())
-			if m.ContentLength() > 0 {
-				log.Println("User is speaking...")
+			energy := calculateVolume(m.Payload())
+			log.Println("Energy:", energy)
+			if energy < silenceThreshold {
+				if !detectingSilence {
+					silenceStart = time.Now()
+					detectingSilence = true
+				} else if time.Since(silenceStart) >= silenceDuration {
+					log.Println("Detected silence")
+					detectingSilence = false
+					userStoppedSpeaking <- struct{}{}
+					return
+				}
 			} else {
-				log.Println("User stopped speaking")
-				// Signal that the user has stopped speaking
-				userStoppedSpeaking <- struct{}{}
-				return
+				detectingSilence = false
 			}
 		}
 	}
+}
+
+// Calculate the volume of the audio data. This is done by calculating the amplitude of the audio data wave.
+// We are receiving 16-bit signed linear audio data.
+func calculateVolume(buffer []byte) float64 {
+	// Check if the buffer length is a multiple of 2
+	if len(buffer)%2 != 0 {
+		log.Println("Buffer length is not a multiple of 2")
+		return 0
+	}
+
+	var sum float64
+
+	// Iterate on the buffer by 2 bytes at a time
+	for i := 0; i < len(buffer); i += 2 {
+		// Takes two bytes of the buffer and converts them to a 16-bit signed integer in little-endian format
+		// convert from unsigned int to signed int. This is the sample to be used for calculating the amplitude
+		sample := int16(binary.LittleEndian.Uint16(buffer[i:]))
+		// The amplitude of the audio data is calculated by squaring the sample and adding it to the sum
+		sum += float64(sample) * float64(sample)
+	}
+
+	// And finally, the square root of the average, which is the sum of the samples divided by the number of samples.
+	// This is the amplitude of the audio wave.
+	return math.Sqrt(sum / float64(len(buffer)/2))
 }
 
 func sendAudio(w io.Writer, data []byte) error {
