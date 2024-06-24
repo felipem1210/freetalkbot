@@ -21,3 +21,4 @@
 go.work
 asterisk/container-config/
 pulse/
+audiosocket-server/tmp
