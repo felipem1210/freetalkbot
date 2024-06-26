@@ -1,4 +1,4 @@
-module felipem1210/freetalkbot
+module github.com/felipem1210/freetalkbot
 
 //replace github.com/felipem1210/freetalkbot/cmd => ./cmd
 

@@ -165,9 +165,9 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 					detectingSilence = true
 				} else if time.Since(silenceStart) >= silenceDuration {
 					log.Println("Detected silence")
-					filteredData := filterSilence(messageData, inputAudioFormat)
+					//filteredData := filterSilence(messageData, inputAudioFormat)
 					hangupCh <- true
-					audioDataCh <- filteredData
+					audioDataCh <- messageData
 					return
 				}
 			} else {
