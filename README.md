@@ -13,16 +13,19 @@ Asterisk is raised up in network_mode host.
 
 Checkout pjsip_endpoint.conf file.
 
-## Configure audiosocket-server
+## Run talkbot server
 
 Go version recommended: 1.22
 
 Raise up server
 
 ```sh
-cd audiosocket-server
 go mod tidy
-go run main.go
+go run main.go init -c audio
 ```
 
-For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
+For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air) and initialize the talkbot server with this:
+
+```sh
+air -- init -c audio
+```

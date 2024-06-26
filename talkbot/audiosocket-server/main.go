@@ -2,8 +2,10 @@ package audiosocketserver
 
 import (
 	"context"
+	"encoding/binary"
 	"io"
 	"log"
+	"math"
 	"net"
 	"strings"
 	"time"
@@ -14,7 +16,7 @@ import (
 
 const (
 	listenAddr       = ":8080"
-	inputAudioFormat = "pcm16" // "g711" or "pcm16"
+	inputAudioFormat = "audiosocket" // "g711" or "audiosocket"
 	languageCode     = "en-US"
 
 	// slinChunkSize is the number of bytes which should be sent per Slin
@@ -29,10 +31,7 @@ const (
 	MaxCallDuration  = 2 * time.Minute //  MaxCallDuration is the maximum amount of time to allow a call to be up before it is terminated.
 )
 
-var (
-	audioData []byte
-	err       error
-)
+var audioData []byte
 
 func init() {
 }
@@ -40,18 +39,19 @@ func init() {
 // ErrHangup indicates that the call should be terminated or has been terminated
 var ErrHangup = errors.New("Hangup")
 
-func InitializeServer() {
+func main() {
+	var err error
 	ctx := context.Background()
 
 	log.Println("listening for AudioSocket connections on", listenAddr)
-	if err = listen(ctx); err != nil {
+	if err = Listen(ctx); err != nil {
 		log.Fatalln("listen failure:", err)
 	}
 	log.Println("exiting")
 }
 
 // Listen listens for and responds to AudioSocket connections
-func listen(ctx context.Context) error {
+func Listen(ctx context.Context) error {
 	l, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return errors.Wrapf(err, "failed to bind listener to socket %s", listenAddr)
@@ -104,7 +104,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 		default:
 			// Start listening for user speech
 			log.Println("receiving audio")
-			go processFromAsterisk(cancel, c, hangupCh, audioDataCh)
+			go listenForSpeech(cancel, c, hangupCh, audioDataCh)
 
 			// Wait for user to stop speaking
 			<-hangupCh
@@ -126,7 +126,16 @@ func Handle(pCtx context.Context, c net.Conn) {
 	}
 }
 
-func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bool, audioDataCh chan []byte) {
+func sendHangupSignal(c net.Conn) {
+	hangupMessage := audiosocket.HangupMessage()
+	if _, err := c.Write(hangupMessage); err != nil {
+		log.Println("Failed to send hangup signal:", err)
+	} else {
+		log.Println("Hangup signal sent successfully")
+	}
+}
+
+func listenForSpeech(cancel context.CancelFunc, c net.Conn, hangupCh chan bool, audioDataCh chan []byte) {
 	var silenceStart time.Time
 	var messageData []byte
 	detectingSilence := false
@@ -157,7 +166,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 			if inputAudioFormat == "g711" {
 				volume = calculateVolumeG711(m.Payload())
 			} else {
-				volume = calculateVolumePCM16(m.Payload())
+				volume = calculateVolumeAudioSocket(m.Payload())
 			}
 			if volume < silenceThreshold {
 				if !detectingSilence {
@@ -165,9 +174,10 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 					detectingSilence = true
 				} else if time.Since(silenceStart) >= silenceDuration {
 					log.Println("Detected silence")
-					//filteredData := filterSilence(messageData, inputAudioFormat)
+					filteredData := filterSilence(messageData, inputAudioFormat)
 					hangupCh <- true
-					audioDataCh <- messageData
+					audioDataCh <- filteredData
+					messageData = nil
 					return
 				}
 			} else {
@@ -177,16 +187,113 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 	}
 }
 
-// sendAudio sends audio data to the Asterisk server
+// filterSilence filters out initial silence from the audio data
+func filterSilence(data []byte, format string) []byte {
+	threshold := silenceThreshold                            // Define el umbral de silencio según el formato
+	silenceDuration := time.Duration(900 * time.Millisecond) // Ajusta la duración según sea necesario
+
+	var volumeFunc func([]byte) float64
+	if format == "g711" {
+		volumeFunc = calculateVolumeG711
+	} else {
+		volumeFunc = calculateVolumeAudioSocket
+	}
+
+	var filteredData []byte
+	silenceStart := time.Now()
+
+	for len(data) > 0 {
+		var chunkSize int
+		if format == "g711" {
+			chunkSize = 160 // Aproximadamente 20ms de audio para g711
+		} else {
+			chunkSize = 320 // Aproximadamente 20ms de audio para PCM
+		}
+
+		if len(data) < chunkSize {
+			chunkSize = len(data)
+		}
+
+		chunk := data[:chunkSize]
+		data = data[chunkSize:]
+
+		volume := volumeFunc(chunk)
+		if volume > float64(threshold) {
+			filteredData = append(filteredData, chunk...)
+		} else if time.Since(silenceStart) >= silenceDuration {
+			filteredData = append(filteredData, chunk...)
+		}
+	}
+
+	return filteredData
+}
+
+// Calculate the volume of the audio data. This is done by calculating the amplitude of the audio data wave.
+// We are receiving 16-bit signed linear audio data.
+func calculateVolumeAudioSocket(buffer []byte) float64 {
+	// Check if the buffer length is a multiple of 2
+	if len(buffer)%2 != 0 {
+		log.Println("Buffer length is not a multiple of 2")
+		return 0
+	}
+
+	var sum float64
+
+	// Iterate on the buffer by 2 bytes at a time
+	for i := 0; i < len(buffer); i += 2 {
+		// Takes two bytes of the buffer and converts them to a 16-bit signed integer in little-endian format
+		// convert from unsigned int to signed int. This is the sample to be used for calculating the amplitude
+		sample := int16(binary.LittleEndian.Uint16(buffer[i:]))
+		// The amplitude of the audio data is calculated by squaring the sample and adding it to the sum
+		sum += float64(sample) * float64(sample)
+	}
+
+	// And finally, the square root of the average, which is the sum of the samples divided by the number of samples.
+	// This is the amplitude of the audio wave.
+	return math.Sqrt(sum / float64(len(buffer)/2))
+}
+
+// ulawToLinear decodes a byte coded in g711 u-law format to a 16-bit signed linear PCM value.
+func ulawToLinear(ulaw byte) int16 {
+	ulaw ^= 0xFF
+	sign := int16(ulaw & 0x80)
+	exponent := int16((ulaw >> 4) & 0x07)
+	mantissa := int16(ulaw & 0x0F)
+	value := (mantissa << 4) + 0x08
+	if exponent != 0 {
+		value += 0x100
+		value <<= (exponent - 1)
+	}
+	if sign != 0 {
+		value = -value
+	}
+	return value
+}
+
+// Calculate volume data for G711 audio data
+func calculateVolumeG711(buffer []byte) float64 {
+	var sum float64
+	sampleCount := len(buffer)
+	for _, ulaw := range buffer {
+		sample := ulawToLinear(ulaw)
+		sum += float64(sample) * float64(sample)
+	}
+	return math.Sqrt(sum / float64(sampleCount))
+}
+
 func sendAudio(w io.Writer, data []byte) error {
+
 	var i, chunks int
+
 	t := time.NewTicker(20 * time.Millisecond)
 	defer t.Stop()
 
 	for range t.C {
+
 		if i >= len(data) {
 			return nil
 		}
+
 		var chunkLen = slinChunkSize
 		if i+slinChunkSize > len(data) {
 			chunkLen = len(data) - i
@@ -196,6 +303,7 @@ func sendAudio(w io.Writer, data []byte) error {
 		}
 		chunks++
 		i += chunkLen
+
 	}
 	return errors.New("ticker unexpectedly stopped")
 }
