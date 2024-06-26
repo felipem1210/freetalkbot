@@ -21,4 +21,4 @@
 go.work
 asterisk/container-config/
 pulse/
-*/tmp
+tmp
