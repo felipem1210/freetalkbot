@@ -5,52 +5,9 @@ import (
 	"log"
 	"math"
 	"net"
-	"time"
 
 	"github.com/CyCoreSystems/audiosocket"
 )
-
-// filterSilence filters out initial silence from the audio data
-func filterSilence(data []byte, format string) []byte {
-	threshold := 400                                          // Define el umbral de silencio según el formato
-	silenceDuration := time.Duration(3000 * time.Millisecond) // Ajusta la duración según sea necesario
-
-	var volumeFunc func([]byte) float64
-	if format == "g711" {
-		volumeFunc = calculateVolumeG711
-	} else {
-		volumeFunc = calculateVolumePCM16
-	}
-
-	var filteredData []byte
-	silenceStart := time.Now()
-
-	for len(data) > 0 {
-		var chunkSize int
-		if format == "g711" {
-			chunkSize = 160 // Aproximadamente 20ms de audio para g711
-		} else {
-			chunkSize = 340 // Aproximadamente 20ms de audio para PCM
-		}
-
-		if len(data) < chunkSize {
-			chunkSize = len(data)
-		}
-
-		chunk := data[:chunkSize+20]
-		data = data[chunkSize:]
-
-		volume := volumeFunc(chunk)
-		log.Printf("Volume: %f\n", volume)
-		if volume > float64(threshold) {
-			filteredData = append(filteredData, chunk...)
-		} else if time.Since(silenceStart) >= silenceDuration {
-			filteredData = append(filteredData, chunk...)
-		}
-	}
-
-	return filteredData
-}
 
 // Calculate the volume of the audio data. This is done by calculating the amplitude of the audio data wave.
 // We are receiving 16-bit signed linear audio data.
