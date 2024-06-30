@@ -5,10 +5,13 @@ import (
 	"io"
 	"log"
 	"net"
-	"strings"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/CyCoreSystems/audiosocket"
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
 	"github.com/pkg/errors"
 )
 
@@ -89,7 +92,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 	// Configure the call timer
 	callTimer := time.NewTimer(MaxCallDuration)
 	defer callTimer.Stop()
-
+	i := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -112,17 +115,22 @@ func Handle(pCtx context.Context, c net.Conn) {
 			log.Println("user stopped speaking")
 			log.Println("sending audio")
 			start := time.Now()
-			if err = sendAudio(c, audioData); err != nil {
-				if strings.Contains(err.Error(), "broken pipe") {
-					log.Println("Received hangup from asterisk")
-				} else {
-					log.Println("failed to send audio to Asterisk:", err)
-				}
-				return
-			} else {
-				log.Println("completed audio send in", time.Since(start).Round(time.Second).String())
+			err := saveToWAV(audioData, "output-"+strconv.Itoa(i)+".wav")
+			if err != nil {
+				log.Fatalf("failed to save audio to wav: %v", err)
 			}
+			// if err = sendAudio(c, audioData); err != nil {
+			// 	if strings.Contains(err.Error(), "broken pipe") {
+			// 		log.Println("Received hangup from asterisk")
+			// 	} else {
+			// 		log.Println("failed to send audio to Asterisk:", err)
+			// 	}
+			// 	return
+			// } else {
+			log.Println("completed audio save in", time.Since(start).Round(time.Second).String())
+			// }
 		}
+		i++
 	}
 }
 
@@ -197,4 +205,42 @@ func sendAudio(w io.Writer, data []byte) error {
 		i += chunkLen
 	}
 	return errors.New("ticker unexpectedly stopped")
+}
+
+// saveToWAV saved data into a wav file.
+func saveToWAV(audioData []byte, filename string) error {
+	// Create output file
+	outFile, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	// Create new wav encoder
+	enc := wav.NewEncoder(outFile, 8000, 16, 1, 1)
+
+	// Convert []byte audio data into a format that the WAV encoder can understand
+	buf := &audio.IntBuffer{
+		Format: &audio.Format{
+			SampleRate:  8000,
+			NumChannels: 1,
+		},
+		Data: make([]int, len(audioData)/2),
+	}
+
+	for i := 0; i < len(audioData)/2; i++ {
+		buf.Data[i] = int(int16(audioData[2*i]) | int16(audioData[2*i+1])<<8)
+	}
+
+	// Write the PCM audio data to the WAV encoder
+	if err := enc.Write(buf); err != nil {
+		return err
+	}
+
+	// Close the encoder to ensure all data is written
+	if err := enc.Close(); err != nil {
+		return err
+	}
+
+	return nil
 }
