@@ -2,6 +2,7 @@ package cmd
 
 import (
 	audiosocketserver "github.com/felipem1210/freetalkbot/audiosocket-server"
+	"github.com/felipem1210/freetalkbot/whatsapp"
 	"github.com/spf13/cobra"
 )
 
@@ -14,6 +15,8 @@ var prCmd = &cobra.Command{
 		comChan, _ := cmd.Flags().GetString("communication-channel")
 		if comChan == "audio" {
 			audiosocketserver.InitializeServer()
+		} else if comChan == "whatsapp" {
+			whatsapp.InitializeServer()
 		}
 	},
 }

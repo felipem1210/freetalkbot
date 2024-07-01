@@ -13,19 +13,38 @@ Asterisk is raised up in network_mode host.
 
 Checkout pjsip_endpoint.conf file.
 
-## Run talkbot server
+## Dependencies
 
 Go version recommended: 1.22
+Install dependencies with `go mod tidy`
 
-Raise up server
+For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
+
+## Run talkbot server
+
+### Run audiosocket-server
 
 ```sh
-go mod tidy
 go run main.go init -c audio
 ```
 
-For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air) and initialize the talkbot server with this:
+with air
 
 ```sh
 air -- init -c audio
 ```
+
+### Run whatsapp server
+
+```sh
+go run main.go init -c whatsapp
+```
+
+with air
+
+```sh
+air -- init -c whatsapp
+```
+
+After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
+The whatsapp server store session in sqlite, so you will see a `examplestore.db` file. If you delete this file you will have to login using a new QR code.
