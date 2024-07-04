@@ -3,8 +3,8 @@ Your own IA to handle communications with your customers via phonecalls or whats
 
 ## Dependencies
 
-Go version recommended: 1.22
-Install dependencies with `go mod tidy`
+* Go version recommended: 1.22
+* Install dependencies with `go mod tidy`
 
 For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
 
@@ -67,7 +67,3 @@ air -- init -c whatsapp
 
 After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
 The whatsapp server store session in sqlite, so you will see a `.db` file. If you delete this file you will have to login using a new QR code.
-
-## Run Rasa example personal assistant
-
-Rasa assistant is defined in docker-compose
