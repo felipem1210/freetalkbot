@@ -24,3 +24,8 @@ pulse/
 tmp
 *.wav
 *.db
+rasa/.rasa/*
+rasa/pip
+rasa/.bash_history
+.env
+.*.drawio.bkp

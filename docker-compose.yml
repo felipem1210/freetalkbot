@@ -15,6 +15,18 @@ services:
       - ./asterisk/container-config:/etc/asterisk
       - ./pulse:/run/pulse:rshared          # Use host audio
       - /etc/localtime:/etc/localtime:ro    # Use host timezone
-
+      
+  rasa:
+    # Image for apple silicon machines.
+    # In linux machine you can use rasa/rasa:3.6.20-full
+    image: khalosa/rasa-aarch64:3.5.2
+    volumes:
+      - ./rasa:/app
+    command:
+      - run 
+      - --enable-api 
+      - --cors 
+      - "*"
+    network_mode: host
 volumes:
-  asterisk-conf:                                # Persistent storage
+  asterisk-conf:   # Persistent storage

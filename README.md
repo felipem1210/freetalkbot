@@ -1,18 +1,6 @@
 # freetalkbot
 Your own IA to handle communications with your customers via phonecalls or whatsapp
 
-## Configure asterisk
-
-1. Run `docker-compose up -d` to bootstrap asterisk.
-2. Copy local-config to container-config `cp -a asterisk/local-config/* asterisk/container-config/`
-3. Restart asterisk container `docker-compose restart asterisk`
-
-Asterisk is raised up in network_mode host.
-
-## Register SIP endpoint
-
-Checkout pjsip_endpoint.conf file.
-
 ## Dependencies
 
 Go version recommended: 1.22
@@ -20,9 +8,40 @@ Install dependencies with `go mod tidy`
 
 For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
 
-## Run talkbot server
+### Environment variables
 
-### Run audiosocket-server
+Check the variables in `env.example` file. Create `.env` file with `cp -a .env.example .env` and modify it with your values. 
+All bot servers reads configuration from this file. 
+
+## Development
+
+The components added in the `docker-compose.yml` file are:
+
+* Asterisk
+* [Rasa assistant](https://rasa.com/)
+
+Raise up the development environment with `docker-compose up -d`
+
+### Configure asterisk
+
+1. Once raised up, copy local-config to container-config `cp -a asterisk/local-config/* asterisk/container-config/`
+2. Restart asterisk container `docker-compose restart asterisk`
+
+Asterisk is raised up in network_mode host. The asterisk configuration files are mapped in folder `asterisk/container-config`
+
+### Register SIP endpoint
+
+Checkout pjsip_endpoint.conf file in `asterisk/container-config` folder.
+
+### Rasa assistant
+
+The example assistant is on [rasa folder](./rasa/). The files in this folder are for NLP training of the assistant.
+Checkout the following resources to get more knowledge about RASA.
+
+* [Documentation](https://rasa.com/docs/rasa/training-data-format)
+* [Youtube Channel](https://www.youtube.com/@RasaHQ)
+
+## Audio bot
 
 ```sh
 go run main.go init -c audio
@@ -34,7 +53,7 @@ with air
 air -- init -c audio
 ```
 
-### Run whatsapp server
+## Whatsapp bot
 
 ```sh
 go run main.go init -c whatsapp
@@ -47,4 +66,8 @@ air -- init -c whatsapp
 ```
 
 After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
-The whatsapp server store session in sqlite, so you will see a `examplestore.db` file. If you delete this file you will have to login using a new QR code.
+The whatsapp server store session in sqlite, so you will see a `.db` file. If you delete this file you will have to login using a new QR code.
+
+## Run Rasa example personal assistant
+
+Rasa assistant is defined in docker-compose
