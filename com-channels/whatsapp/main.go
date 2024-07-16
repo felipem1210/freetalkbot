@@ -133,6 +133,14 @@ func InitializeServer() {
 		if err != nil {
 			panic(err)
 		}
+		pairPhoneNumber, varExists := os.LookupEnv("PAIR_PHONE_NUMBER")
+		if varExists {
+			code, err := client.PairPhone(pairPhoneNumber, true, whatsmeow.PairClientChrome, "Chrome (MacOS)")
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("Pairing code:", code)
+		}
 		for evt := range qrChan {
 			if evt.Event == "code" {
 				// Render the QR code here

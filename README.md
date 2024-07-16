@@ -66,4 +66,6 @@ air -- init -c whatsapp
 ```
 
 After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
+If you can't scan the QR code you can also link the whatsapp account using a pair code. For that you must set the envar `PAIR_PHONE_NUMBER` with 
+your phone number using format show in the `.env.example`. If you don't need the pair code don't set this envar.
 The whatsapp server store session in sqlite, so you will see a `.db` file. If you delete this file you will have to login using a new QR code.
