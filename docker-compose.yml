@@ -28,5 +28,16 @@ services:
       - --cors 
       - "*"
     network_mode: host
+
+  rasa-actions-server:
+    build:
+      context: ./rasa
+    volumes:
+      - ./rasa:/app
+    command:
+      - run 
+      - actions
+    network_mode: host
+
 volumes:
   asterisk-conf:   # Persistent storage

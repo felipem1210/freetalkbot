@@ -1,108 +1,138 @@
 package whatsapp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 
+	"github.com/creack/pty"
+	openai "github.com/felipem1210/freetalkbot/genai/openai"
+	rasa "github.com/felipem1210/freetalkbot/rasa"
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
-	waProto "go.mau.fi/whatsmeow/binary/proto"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 )
 
-// Define a structure to match the JSON response
-type Response struct {
-	RecipientID string `json:"recepient_id"`
-	Text        string `json:"text"`
-	Image       string `json:"image"`
-}
-
 func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 	return func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Message:
+			var messageId = v.Info.ID
 			var messageBody = v.Message.GetConversation()
 			var senderName = v.Info.Sender.String()
 			fmt.Printf("Message from %s: %s\n", senderName, messageBody)
 			if messageBody != "" {
 				// send http request to rasa server
-				responses := sendHttpRequest(messageBody)
-				var finalResponse string
-				for _, response := range responses {
-					if response.Image != "" {
-						finalResponse = response.Image
-					} else {
-						finalResponse = response.Text
-					}
-					client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
-						Conversation: proto.String(finalResponse),
-					})
+				respBody := rasa.SendMessage("webhooks/rest/webhook", messageBody)
+				responses := rasa.ReceiveMessage(respBody)
+				sendWhatsappResponse(responses, client, v)
+			}
+			if v.Message.GetAudioMessage() != nil {
+				var callbackResponses []rasa.Response
+				audioMessage := v.Message.GetAudioMessage()
+				translation, err := handleAudioMessage(audioMessage, messageId)
+				if err != nil {
+					log.Fatalf("Error handling audio message: %s", err)
 				}
+				_ = rasa.SendMessage("webhooks/callback/webhook", translation)
+				callbackResponse := &rasa.CallbackResponse
+				callbackResponses = append(callbackResponses, *callbackResponse)
+				fmt.Printf("Callback response: %v\n", callbackResponses)
+				sendWhatsappResponse(callbackResponses, client, v)
+
 			}
 		}
 	}
 }
 
-// send POST http request to a server, the content will be in json format
-func sendHttpRequest(m string) []Response {
-	rasaUrl := os.Getenv("RASA_URL") // http://localhost:5005/webhooks/rest/webhook
-	// Data to be sent in the request body
-	data := map[string]string{
-		"sender":  "sender",
-		"message": m,
+func sendWhatsappResponse(responses []rasa.Response, client *whatsmeow.Client, v *events.Message) {
+	var finalResponse string
+	for _, response := range responses {
+		if response.Image != "" && response.Image != "<nil>" {
+			finalResponse = response.Image
+		} else {
+			finalResponse = response.Text
+		}
+		client.SendMessage(context.Background(), v.Info.Chat, &waE2E.Message{
+			Conversation: proto.String(finalResponse),
+		})
 	}
+}
 
-	// Convert the data to JSON
-	jsonData, err := json.Marshal(data)
+func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, error) {
+	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
+	err := downloadAudio(audioMessage.GetURL(), "audios/audio.enc")
 	if err != nil {
-		log.Fatalf("Error converting data to JSON: %s", err)
+		return "", err
 	}
-
-	// Create the POST request
-	req, err := http.NewRequest("POST", rasaUrl, bytes.NewBuffer(jsonData))
+	err = decryptAudioFile("audios/audio.enc", "audios/"+messageId+".ogg", mediaKeyHex)
 	if err != nil {
-		log.Fatalf("Error creating request: %s", err)
+		return "", err
 	}
-
-	// Set the content type to JSON
-	req.Header.Set("Content-Type", "application/json")
-
-	// Create an HTTP client and send the request
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	openAiClient := openai.CreateOpenAiClient()
+	transcription, err := openai.TranscribeAudio(openAiClient, "audios/"+messageId+".ogg")
 	if err != nil {
-		log.Fatalf("Error sending request: %s", err)
+		return "", err
+	}
+	translation, err := openai.TranslateText(openAiClient, transcription)
+	if err != nil {
+		return "", err
+	}
+	return translation, nil
+}
+
+func decryptAudioFile(inputFilePath string, outputFilePath string, mediaKey string) error {
+	// Execute whatsapp-media-decrypt tool
+	cmdString := fmt.Sprintf("whatsapp-media-decrypt -o %s -t 3 %s %s", outputFilePath, inputFilePath, mediaKey)
+	cmd := exec.Command("/bin/sh", "-c", cmdString)
+	f, err := pty.Start(cmd)
+	if err != nil {
+		return err
+	}
+	io.Copy(os.Stdout, f)
+	return nil
+}
+
+func downloadAudio(url, dest string) error {
+	// Create the destination file
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Make the HTTP request
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
 	}
 	defer resp.Body.Close()
 
-	// Read the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Error reading response: %s", err)
+	// Check the HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP error: %s", resp.Status)
 	}
-	fmt.Printf("Response: %s\n", body)
 
-	// Parse the JSON response
-	var responses []Response
-	//var finalResponse string
-	err = json.Unmarshal(body, &responses)
+	// Copy the content to the file
+	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		log.Fatalf("Error parsing JSON response: %s", err)
+		return err
 	}
-	return responses
+
+	return nil
 }
 
 func InitializeServer() {

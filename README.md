@@ -4,6 +4,7 @@ Your own IA to handle communications with your customers via phonecalls or whats
 ## Dependencies
 
 * Go version recommended: 1.22
+* [whatsapp-media-decrypt](https://github.com/ddz/whatsapp-media-decrypt/tree/master) tool
 * Install dependencies with `go mod tidy`
 
 For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
@@ -69,3 +70,5 @@ After initialize you will see in the logs a QR code. Scan that QR code with the 
 If you can't scan the QR code you can also link the whatsapp account using a pair code. For that you must set the envar `PAIR_PHONE_NUMBER` with 
 your phone number using format show in the `.env.example`. If you don't need the pair code don't set this envar.
 The whatsapp server store session in sqlite, so you will see a `.db` file. If you delete this file you will have to login using a new QR code.
+
+### Features
