@@ -45,52 +45,66 @@ func handleBotEndpoint(c *gin.Context) {
 }
 
 func SendMessage(e string, m string) io.ReadCloser {
-	rasaUrl := fmt.Sprintf("%s/%s", os.Getenv("RASA_URL"), e) // http://localhost:5005/webhooks/rest/webhook
-	// Data to be sent in the request body
-	data := map[string]string{
-		"sender":  "sender",
-		"message": m,
-	}
-	// Convert the data to JSON
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Fatalf("Error converting data to JSON: %s", err)
-	}
+    rasaUrl := fmt.Sprintf("%s/%s", os.Getenv("RASA_URL"), e)
+    data := map[string]string{
+        "sender":  "sender",
+        "message": m,
+    }
+    jsonData, err := json.Marshal(data)
+    if err != nil {
+        log.Fatalf("Error converting data to JSON: %s", err)
+    }
 
-	// Create the POST request
-	req, err := http.NewRequest("POST", rasaUrl, bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Fatalf("Error creating request: %s", err)
-	}
+    req, err := http.NewRequest("POST", rasaUrl, bytes.NewBuffer(jsonData))
+    if err != nil {
+        log.Fatalf("Error creating request: %s", err)
+    }
+    req.Header.Set("Content-Type", "application/json")
 
-	// Set the content type to JSON
-	req.Header.Set("Content-Type", "application/json")
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        log.Fatalf("Error sending request: %s", err)
+    }
 
-	// Create an HTTP client and send the request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("Error sending request: %s", err)
-	}
-	return resp.Body
+    if resp.StatusCode >= 400 {
+        body, _ := io.ReadAll(resp.Body)
+        log.Printf("Error response from server: %s", body)
+        return nil
+    }
+
+    return resp.Body
 }
 
-// ReceiveMessage receives a response from Rasa
+
+
+
 func ReceiveMessage(respBody io.ReadCloser) []Response {
-	// Read the response
-	body, err := io.ReadAll(respBody)
-	if err != nil {
-		log.Fatalf("Error reading response: %s", err)
-	}
-	fmt.Printf("Response: %s\n", body)
+    if respBody == nil {
+        log.Println("Received a nil response body")
+        return nil
+    }
 
-	// Parse the JSON response
-	var responses []Response
-	//var finalResponse string
-	err = json.Unmarshal(body, &responses)
-	if err != nil {
-		log.Fatalf("Error parsing JSON response: %s", err)
-	}
-	defer respBody.Close()
-	return responses
+    body, err := io.ReadAll(respBody)
+    if err != nil {
+        log.Fatalf("Error reading response: %s", err)
+    }
+    fmt.Printf("Response: %s\n", body)
+
+    var responses []Response
+    if json.Valid(body) {
+        err = json.Unmarshal(body, &responses)
+        if err != nil {
+            log.Printf("Error parsing JSON response: %s", err)
+            log.Printf("Response Body: %s", body)
+            return nil
+        }
+    } else {
+        log.Printf("Received non-JSON response: %s", body)
+        return nil
+    }
+
+    defer respBody.Close()
+    return responses
 }
+

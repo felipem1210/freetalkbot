@@ -1,43 +1,49 @@
+version: '3.0'
+
 services:
   asterisk:
     platform: linux/amd64
     image: mlan/asterisk:full
-    network_mode: host                    # Only here to help testing
+    network_mode: host
     cap_add:
-      - sys_ptrace                          # Only here to help testing
-      - net_admin                           # Allow NFT, used by AutoBan
-      - net_raw                             # Allow NFT, used by AutoBan
+      - sys_ptrace
+      - net_admin
+      - net_raw
     environment:
-      - SYSLOG_LEVEL=${SYSLOG_LEVEL-4}      # Logging
+      - SYSLOG_LEVEL=${SYSLOG_LEVEL-4}
       - HOSTNAME=asterisk.docker.localhost
     volumes:
-      - asterisk-conf:/srv                      # Persistent storage
+      - asterisk-conf:/srv
       - ./asterisk/container-config:/etc/asterisk
-      - ./pulse:/run/pulse:rshared          # Use host audio
-      - /etc/localtime:/etc/localtime:ro    # Use host timezone
-      
+      - ./pulse:/run/pulse:rshared
+      - /etc/localtime:/etc/localtime:ro
+
   rasa:
-    # Image for apple silicon machines.
-    # In linux machine you can use rasa/rasa:3.6.20-full
     image: khalosa/rasa-aarch64:3.5.2
     volumes:
       - ./rasa:/app
-    command:
+    command: 
       - run 
       - --enable-api 
       - --cors 
       - "*"
-    network_mode: host
+    ports:
+      - "5005:5005"
+    network_mode: bridge
 
   rasa-actions-server:
     build:
       context: ./rasa
     volumes:
       - ./rasa:/app
-    command:
+      - ./rasa/models:/app/models
+      - ./rasa/config:/app/config
+    command: 
       - run 
       - actions
-    network_mode: host
+    ports:
+      - "5055:5055"
+    network_mode: bridge
 
 volumes:
-  asterisk-conf:   # Persistent storage
+  asterisk-conf:
