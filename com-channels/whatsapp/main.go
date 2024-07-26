@@ -41,37 +41,37 @@ func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 }
 
 func handleMessageEvent(v *events.Message, client *whatsmeow.Client) {
-    messageBody := v.Message.GetConversation()
-    senderName := v.Info.Sender.String()
-    fmt.Printf("Message from %s: %s\n", senderName, messageBody)
+	messageBody := v.Message.GetConversation()
+	senderName := v.Info.Sender.String()
+	fmt.Printf("Message from %s: %s\n", senderName, messageBody)
 
-    if messageBody != "" {
-        respBody := rasa.SendMessage("webhooks/rest/webhook", messageBody)
-        responses := rasa.ReceiveMessage(respBody)
-        if responses != nil {
-            sendWhatsappResponse(responses, client, v)
-        } else {
-            log.Println("No valid responses received from Rasa")
-        }
-    }
-    if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
-        translation, err := handleAudioMessage(audioMessage, v.Info.ID)
-        if err != nil {
-            log.Printf("Error handling audio message: %s", err)
-            return
-        }
-        respBody := rasa.SendMessage("webhooks/callback/webhook", translation)
-        callbackResponses := rasa.ReceiveMessage(respBody)
-        fmt.Printf("Callback response: %v\n", callbackResponses)
-        if callbackResponses != nil {
-            sendWhatsappResponse(callbackResponses, client, v)
-        } else {
-            log.Println("No valid callback responses received from Rasa")
-        }
-    }
+	if messageBody != "" {
+		respBody := rasa.SendMessage("webhooks/rest/webhook", messageBody)
+		responses := rasa.ReceiveMessage(respBody)
+		if responses != nil {
+			sendWhatsappResponse(responses, client, v)
+		} else {
+			log.Println("No valid responses received from Rasa")
+		}
+	}
+	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
+		var callbackResponses []rasa.Response
+		translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		if err != nil {
+			log.Printf("Error handling audio message: %s", err)
+			return
+		}
+		_ = rasa.SendMessage("webhooks/callback/webhook", translation)
+		callbackResponse := &rasa.CallbackResponse
+		callbackResponses = append(callbackResponses, *callbackResponse)
+		fmt.Printf("Callback response: %v\n", callbackResponses)
+		if callbackResponses != nil {
+			sendWhatsappResponse(callbackResponses, client, v)
+		} else {
+			log.Println("No valid callback responses received from Rasa")
+		}
+	}
 }
-
-
 
 func sendWhatsappResponse(responses []rasa.Response, client *whatsmeow.Client, v *events.Message) {
 	for _, response := range responses {
