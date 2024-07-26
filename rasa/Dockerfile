@@ -10,8 +10,6 @@ RUN python -c "import spacy; spacy.load('en_core_web_md')"
 
 COPY ./ /app
 
-RUN rasa train
-
 EXPOSE 5005
 
 CMD ["rasa", "run", "--enable-api", "--cors", "*", "--debug"]

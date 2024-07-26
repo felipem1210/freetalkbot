@@ -36,11 +36,13 @@ Checkout pjsip_endpoint.conf file in `asterisk/container-config` folder.
 
 ### Rasa assistant
 
-The example assistant is on [rasa folder](./rasa/). The files in this folder are for NLP training of the assistant.
+The assistant is configured to be a reminderbot, inspired in the [example](https://github.com/RasaHQ/rasa/tree/main/examples/reminderbot) provided by rasa. The files in this folder are for NLP training of the assistant.
 Checkout the following resources to get more knowledge about RASA.
 
 * [Documentation](https://rasa.com/docs/rasa/training-data-format)
 * [Youtube Channel](https://www.youtube.com/@RasaHQ)
+
+If you modify any of the rasa files you will need to retrain the assistant, you can do it with `make rasa-train`
 
 ## Audio bot
 
@@ -51,7 +53,7 @@ go run main.go init -c audio
 with air
 
 ```sh
-air -- init -c audio
+make run-audio
 ```
 
 ## Whatsapp bot
@@ -63,7 +65,7 @@ go run main.go init -c whatsapp
 with air
 
 ```sh
-air -- init -c whatsapp
+make run-whatsapp
 ```
 
 After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
@@ -72,3 +74,6 @@ your phone number using format show in the `.env.example`. If you don't need the
 The whatsapp server store session in sqlite, so you will see a `.db` file. If you delete this file you will have to login using a new QR code.
 
 ### Features
+
+Now the code is prepared to receive text or voice messages. If you want to make assistant based on text you should modify it.
+The assistant on this repository is a `reminderbot` that will send you reminders based on voice messages that you are sending to it 

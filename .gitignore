@@ -24,10 +24,10 @@ pulse/
 tmp
 *.wav
 *.db
-rasa/.*
-rasa/pip
-rasa/.bash_history
 .env
 .*.drawio.bkp
-audios/
-
+audios/*.ogg
+rasa/.*
+rasa/pip
+rasa/actions/__pycache__/
+rasa/models/

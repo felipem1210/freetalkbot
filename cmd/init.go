@@ -6,8 +6,8 @@ import (
 	"os"
 
 	audiosocketserver "github.com/felipem1210/freetalkbot/com-channels/audiosocket-server"
+	"github.com/felipem1210/freetalkbot/com-channels/rasa"
 	"github.com/felipem1210/freetalkbot/com-channels/whatsapp"
-	"github.com/felipem1210/freetalkbot/rasa"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )

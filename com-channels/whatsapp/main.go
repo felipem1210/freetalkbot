@@ -21,6 +21,7 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
@@ -31,58 +32,50 @@ const (
 	audioDir     = "audios/"
 )
 
-func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
+var client *whatsmeow.Client
+
+func GetEventHandler() func(interface{}) {
 	return func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Message:
-			handleMessageEvent(v, client)
+			handleMessageEvent(v)
 		}
 	}
 }
 
-func handleMessageEvent(v *events.Message, client *whatsmeow.Client) {
+func handleMessageEvent(v *events.Message) {
 	messageBody := v.Message.GetConversation()
-	senderName := v.Info.Sender.String()
-	fmt.Printf("Message from %s: %s\n", senderName, messageBody)
+	jid := v.Info.Sender.String()
+	fmt.Printf("Message from %s: %s\n", jid, messageBody)
 
 	if messageBody != "" {
-		respBody := rasa.SendMessage("webhooks/rest/webhook", messageBody)
-		responses := rasa.ReceiveMessage(respBody)
-		if responses != nil {
-			sendWhatsappResponse(responses, client, v)
-		} else {
-			log.Println("No valid responses received from Rasa")
-		}
+		respBody := rasa.SendMessage("webhooks/rest/webhook", jid, messageBody)
+		response := rasa.ReceiveMessage(respBody)
+		SendWhatsappResponse(jid, response)
 	}
+
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
-		var callbackResponses []rasa.Response
 		translation, err := handleAudioMessage(audioMessage, v.Info.ID)
 		if err != nil {
 			log.Printf("Error handling audio message: %s", err)
 			return
 		}
-		_ = rasa.SendMessage("webhooks/callback/webhook", translation)
-		callbackResponse := &rasa.CallbackResponse
-		callbackResponses = append(callbackResponses, *callbackResponse)
-		fmt.Printf("Callback response: %v\n", callbackResponses)
-		if callbackResponses != nil {
-			sendWhatsappResponse(callbackResponses, client, v)
-		} else {
-			log.Println("No valid callback responses received from Rasa")
-		}
+		_ = rasa.SendMessage("webhooks/callback/webhook", jid, translation)
 	}
 }
 
-func sendWhatsappResponse(responses []rasa.Response, client *whatsmeow.Client, v *events.Message) {
-	for _, response := range responses {
-		finalResponse := response.Text
-		if response.Image != "" && response.Image != "<nil>" {
-			finalResponse = response.Image
-		}
-		client.SendMessage(context.Background(), v.Info.Chat, &waE2E.Message{
-			Conversation: proto.String(finalResponse),
-		})
+func SendWhatsappResponse(to string, response rasa.Response) {
+	jid, err := types.ParseJID(to)
+	if err != nil {
+		log.Fatalf("Invalid JID: %v", to)
 	}
+	finalResponse := response.Text
+	if response.Image != "" && response.Image != "<nil>" {
+		finalResponse = response.Image
+	}
+	client.SendMessage(context.Background(), jid, &waE2E.Message{
+		Conversation: proto.String(finalResponse),
+	})
 }
 
 func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, error) {
@@ -153,9 +146,8 @@ func InitializeServer() {
 	}
 
 	clientLog := waLog.Stdout("Client", "INFO", true)
-	client := whatsmeow.NewClient(deviceStore, clientLog)
-	client.AddEventHandler(GetEventHandler(client))
-
+	client = whatsmeow.NewClient(deviceStore, clientLog)
+	client.AddEventHandler(GetEventHandler())
 	handleClientConnection(client)
 }
 
@@ -186,7 +178,6 @@ func handleClientConnection(client *whatsmeow.Client) {
 			log.Fatalf("Failed to connect: %v", err)
 		}
 	}
-
 	waitForShutdown(client)
 }
 

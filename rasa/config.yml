@@ -1,14 +1,14 @@
 language: en
 pipeline:
 - name: SpacyNLP
-  model: "en_core_web_md"
+  model: en_core_web_md
 - name: SpacyTokenizer
 - name: SpacyFeaturizer
 - name: RegexFeaturizer
 - name: LexicalSyntacticFeaturizer
 - name: CountVectorsFeaturizer
 - name: CountVectorsFeaturizer
-  analyzer: "char_wb"
+  analyzer: char_wb
   min_ngram: 1
   max_ngram: 4
 - name: DIETClassifier
@@ -22,3 +22,4 @@ policies:
   max_history: 5
   epochs: 100
 - name: RulePolicy
+assistant_id: 20240726-094022-chalky-skillset
