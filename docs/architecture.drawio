@@ -1,4 +1,4 @@
-<mxfile host="Electron" modified="2024-07-25T14:25:08.863Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.6.4 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" etag="p3HLny3r3epXgv-zzj-y" version="24.6.4" type="device" pages="2">
+<mxfile host="Electron" modified="2024-07-29T07:32:52.990Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.6.4 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" etag="QzS9iiK_3bVGxOVUGTiB" version="24.6.4" type="device" pages="2">
   <diagram name="Voicebot" id="AgKNxdyxRzb5iKQTvzNA">
     <mxGraphModel dx="1941" dy="878" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
@@ -324,6 +324,12 @@
           <mxGeometry x="0.2496" y="-2" relative="1" as="geometry">
             <mxPoint y="18" as="offset" />
           </mxGeometry>
+        </mxCell>
+        <mxCell id="QVjArZTux4F_Zm7OXIG2-18" value="Text" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="cFM16robv6XG40BqPuE_-1">
+          <mxGeometry x="360" y="350" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="QVjArZTux4F_Zm7OXIG2-19" value="webhooks/rest/webhook&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;webhooks/callback/webhook&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="cFM16robv6XG40BqPuE_-1">
+          <mxGeometry x="520" y="113" width="180" height="60" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

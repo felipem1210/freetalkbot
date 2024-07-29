@@ -14,7 +14,7 @@ import (
 
 	"github.com/creack/pty"
 	openai "github.com/felipem1210/freetalkbot/genai/openai"
-	rasa "github.com/felipem1210/freetalkbot/rasa"
+	"github.com/felipem1210/freetalkbot/rasa"
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
@@ -46,12 +46,17 @@ func GetEventHandler() func(interface{}) {
 func handleMessageEvent(v *events.Message) {
 	messageBody := v.Message.GetConversation()
 	jid := v.Info.Sender.String()
-	fmt.Printf("Message from %s: %s\n", jid, messageBody)
 
 	if messageBody != "" {
-		respBody := rasa.SendMessage("webhooks/rest/webhook", jid, messageBody)
-		response := rasa.ReceiveMessage(respBody)
+		fmt.Printf("Message from %s: %s\n", jid, messageBody)
+		openAiClient := openai.CreateOpenAiClient()
+		translation, _ := openai.TranslateText(openAiClient, messageBody)
+		respBody := rasa.SendMessage("webhooks/rest/webhook", jid, translation)
+		fmt.Printf("Response from Rasa: %s", respBody)
+		response := rasa.HandleResponseBody(respBody)
+
 		SendWhatsappResponse(jid, response)
+
 	}
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
@@ -70,9 +75,9 @@ func SendWhatsappResponse(to string, response rasa.Response) {
 		log.Fatalf("Invalid JID: %v", to)
 	}
 	finalResponse := response.Text
-	if response.Image != "" && response.Image != "<nil>" {
-		finalResponse = response.Image
-	}
+	// if response.Image != "" && response.Image != "<nil>" {
+	// 	finalResponse = response.Image
+	// }
 	client.SendMessage(context.Background(), jid, &waE2E.Message{
 		Conversation: proto.String(finalResponse),
 	})
