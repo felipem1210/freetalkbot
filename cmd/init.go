@@ -26,6 +26,7 @@ var prCmd = &cobra.Command{
 			audiosocketserver.InitializeServer()
 		} else if comChan == "whatsapp" {
 			validateEnv([]string{"RASA_URL", "SQL_DB_FILE_NAME"})
+			go whatsapp.InitializeCallbackServer()
 			whatsapp.InitializeServer()
 		}
 	},

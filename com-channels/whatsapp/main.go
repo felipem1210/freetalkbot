@@ -1,168 +1,214 @@
 package whatsapp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 
+	"github.com/creack/pty"
+	openai "github.com/felipem1210/freetalkbot/genai/openai"
+	rasa "github.com/felipem1210/freetalkbot/rasa"
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
-	waProto "go.mau.fi/whatsmeow/binary/proto"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 )
 
-// Define a structure to match the JSON response
-type Response struct {
-	RecipientID string `json:"recepient_id"`
-	Text        string `json:"text"`
-	Image       string `json:"image"`
-}
+const (
+	audioEncPath = "audios/audio.enc"
+	audioDir     = "audios/"
+)
 
-func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
+var (
+	chatgptQueries = map[string]string{
+		"translation_english": "Hello, translate this %s to english, if it is already in english, do nothing",
+		"language":            "Hello, please identify the language of this text: %s. Give me only the language name",
+		"translation":         "Hello, translate this %s to this language %s.",
+	}
+)
+
+var whatsappClient *whatsmeow.Client
+var openaiClient openai.Client
+var language string
+
+func GetEventHandler() func(interface{}) {
 	return func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Message:
-			var messageBody = v.Message.GetConversation()
-			var senderName = v.Info.Sender.String()
-			fmt.Printf("Message from %s: %s\n", senderName, messageBody)
-			if messageBody != "" {
-				// send http request to rasa server
-				responses := sendHttpRequest(messageBody)
-				var finalResponse string
-				for _, response := range responses {
-					if response.Image != "" {
-						finalResponse = response.Image
-					} else {
-						finalResponse = response.Text
-					}
-					client.SendMessage(context.Background(), v.Info.Chat, &waProto.Message{
-						Conversation: proto.String(finalResponse),
-					})
-				}
-			}
+			handleMessageEvent(v)
 		}
 	}
 }
 
-// send POST http request to a server, the content will be in json format
-func sendHttpRequest(m string) []Response {
-	rasaUrl := os.Getenv("RASA_URL") // http://localhost:5005/webhooks/rest/webhook
-	// Data to be sent in the request body
-	data := map[string]string{
-		"sender":  "sender",
-		"message": m,
+func handleMessageEvent(v *events.Message) {
+	messageBody := v.Message.GetConversation()
+	jid := v.Info.Sender.String()
+
+	if messageBody != "" {
+		log.Printf("Message from %s\n", jid)
+		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], messageBody))
+		respBody := rasa.SendMessage("webhooks/rest/webhook", jid, translation)
+		responses := rasa.HandleResponseBody(respBody)
+		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], messageBody))
+		for _, response := range responses {
+			responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
+			response.Text = responseTranslated
+			sucess := sendWhatsappResponse(jid, &response)
+			log.Println(sucess)
+		}
+
 	}
 
-	// Convert the data to JSON
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Fatalf("Error converting data to JSON: %s", err)
+	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
+		transcription, translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], transcription))
+		if err != nil {
+			log.Printf("Error handling audio message: %s", err)
+			return
+		}
+
+		_ = rasa.SendMessage("webhooks/callback/webhook", jid, translation)
 	}
+}
 
-	// Create the POST request
-	req, err := http.NewRequest("POST", rasaUrl, bytes.NewBuffer(jsonData))
+func sendWhatsappResponse(to string, response *rasa.Response) string {
+	jid, err := types.ParseJID(to)
 	if err != nil {
-		log.Fatalf("Error creating request: %s", err)
+		log.Fatalf("Invalid JID: %v", to)
 	}
-
-	// Set the content type to JSON
-	req.Header.Set("Content-Type", "application/json")
-
-	// Create an HTTP client and send the request
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	_, err = whatsappClient.SendMessage(context.Background(), jid, &waE2E.Message{
+		Conversation: proto.String(response.Text),
+	})
 	if err != nil {
-		log.Fatalf("Error sending request: %s", err)
+		log.Fatalf("Failed to send message: %v", err)
+	}
+	return fmt.Sprintf("Message sent to %s", to)
+}
+
+func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, string, error) {
+	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
+	if err := downloadAudio(audioMessage.GetURL(), audioEncPath); err != nil {
+		return "", "", err
+	}
+	audioFilePath := fmt.Sprintf("%s%s.ogg", audioDir, messageId)
+	if err := decryptAudioFile(audioEncPath, audioFilePath, mediaKeyHex); err != nil {
+		return "", "", err
+	}
+	transcription, err := openai.TranscribeAudio(openaiClient, audioFilePath)
+	if err != nil {
+		return "", "", err
+	}
+	translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], transcription))
+	if err != nil {
+		return "", "", err
+	}
+	return transcription, translation, nil
+}
+
+func decryptAudioFile(inputFilePath, outputFilePath, mediaKey string) error {
+	cmdString := fmt.Sprintf("whatsapp-media-decrypt -o %s -t 3 %s %s", outputFilePath, inputFilePath, mediaKey)
+	cmd := exec.Command("/bin/sh", "-c", cmdString)
+	f, err := pty.Start(cmd)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(os.Stdout, f)
+	return err
+}
+
+func downloadAudio(url, dest string) error {
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
 	}
 	defer resp.Body.Close()
 
-	// Read the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Error reading response: %s", err)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP error: %s", resp.Status)
 	}
-	fmt.Printf("Response: %s\n", body)
 
-	// Parse the JSON response
-	var responses []Response
-	//var finalResponse string
-	err = json.Unmarshal(body, &responses)
-	if err != nil {
-		log.Fatalf("Error parsing JSON response: %s", err)
-	}
-	return responses
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 func InitializeServer() {
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %s", err)
 	}
-	sqlDbFileName := os.Getenv("SQL_DB_FILE_NAME") // examplestore.db
+	sqlDbFileName := os.Getenv("SQL_DB_FILE_NAME")
 	dbLog := waLog.Stdout("Database", "INFO", true)
-	// Make sure you add appropriate DB connector imports, e.g. github.com/mattn/go-sqlite3 for SQLite
+
 	container, err := sqlstore.New("sqlite3", "file:"+sqlDbFileName+"?_foreign_keys=on", dbLog)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to initialize SQL store: %v", err)
 	}
-	// If you want multiple sessions, remember their JIDs and use .GetDevice(jid) or .GetAllDevices() instead.
+
 	deviceStore, err := container.GetFirstDevice()
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to get device: %v", err)
 	}
-	clientLog := waLog.Stdout("Client", "INFO", true)
-	client := whatsmeow.NewClient(deviceStore, clientLog)
-	client.AddEventHandler(GetEventHandler(client))
 
+	openaiClient = openai.CreateNewClient()
+
+	clientLog := waLog.Stdout("Client", "INFO", true)
+	whatsappClient = whatsmeow.NewClient(deviceStore, clientLog)
+	whatsappClient.AddEventHandler(GetEventHandler())
+	handleClientConnection(whatsappClient)
+}
+
+func handleClientConnection(client *whatsmeow.Client) {
 	if client.Store.ID == nil {
-		// No ID stored, new login
 		qrChan, _ := client.GetQRChannel(context.Background())
-		err = client.Connect()
-		if err != nil {
-			panic(err)
+		if err := client.Connect(); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
 		}
 		pairPhoneNumber, varExists := os.LookupEnv("PAIR_PHONE_NUMBER")
 		if varExists {
-			code, err := client.PairPhone(pairPhoneNumber, true, whatsmeow.PairClientChrome, "Chrome (MacOS)")
-			if err != nil {
-				panic(err)
+			if code, err := client.PairPhone(pairPhoneNumber, true, whatsmeow.PairClientChrome, "Chrome (MacOS)"); err != nil {
+				log.Fatalf("Failed to pair phone: %v", err)
+			} else {
+				fmt.Println("Pairing code:", code)
 			}
-			fmt.Println("Pairing code:", code)
 		}
 		for evt := range qrChan {
 			if evt.Event == "code" {
-				// Render the QR code here
 				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-				// or just manually `echo 2@... | qrencode -t ansiutf8` in a terminal
 				fmt.Println("QR code:", evt.Code)
 			} else {
 				fmt.Println("Login event:", evt.Event)
 			}
 		}
 	} else {
-		// Already logged in, just connect
-		err = client.Connect()
-		if err != nil {
-			panic(err)
+		if err := client.Connect(); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
 		}
 	}
+	waitForShutdown(client)
+}
 
-	// Listen to Ctrl+C (you can also do something else that prevents the program from exiting)
+func waitForShutdown(client *whatsmeow.Client) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
-
 	client.Disconnect()
 }

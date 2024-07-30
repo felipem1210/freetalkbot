@@ -1,34 +1,39 @@
 version: "3.1"
 
-intents:
-  - greet
-  - goodbye
-  - affirm
-  - deny
-  - mood_great
-  - mood_unhappy
-  - bot_challenge
-
-responses:
-  utter_greet:
-  - text: "Hey! How are you?"
-
-  utter_cheer_up:
-  - text: "Here is something to cheer you up:"
-    image: "https://i.imgur.com/nGF1K8f.jpg"
-
-  utter_did_that_help:
-  - text: "Did that help you?"
-
-  utter_happy:
-  - text: "Great, carry on!"
-
-  utter_goodbye:
-  - text: "Bye"
-
-  utter_iamabot:
-  - text: "I am a bot, powered by Rasa."
-
 session_config:
   session_expiration_time: 60
   carry_over_slots_to_new_session: true
+intents:
+- greet
+- explain
+- say_purpose
+- ask_remind_call
+- ask_forget_reminders
+- bye
+- EXTERNAL_reminder
+- EXT_reminder
+entities:
+- PERSON
+slots:
+  PERSON:
+    type: text
+    influence_conversation: false
+    mappings:
+    - type: from_entity
+      entity: PERSON
+responses:
+  utter_greet:
+  - text: Hey! how are you? In case you asked, I am good, I am a reminders assistant. How can I help you?
+  - text: Hello! how are you? In case you asked, I am good, I am a reminders assistant. How can I help you?
+  - text: Good day! how are you? In case you asked, I am good, I am a reminders assistant. How can I help you?
+  utter_purpose:
+  - text: I am a reminder assistant. I can help you set reminders and forget them.
+  - text: My purpose is to help you set reminders and forget them.
+  utter_explanation:
+  - text: "You will receive your reminders about anything you need to remember on time. You need to say something like 'Hey assistant, remind me half an hour before that I have a doctor appointment the 8th of May at 15:00' You can also say \"Hey assistant, remind me in 30 minutes that I have to call John\""
+  utter_goodbye:
+  - text: Bye
+actions:
+- action_set_reminder
+- action_forget_reminders
+- action_react_to_reminder

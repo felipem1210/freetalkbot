@@ -1,13 +1,32 @@
 version: "3.1"
-
 rules:
-
-- rule: Say goodbye anytime the user says goodbye
+- rule: greet
   steps:
-  - intent: goodbye
+  - intent: greet
+  - action: utter_greet
+- rule: explain purpose
+  steps:
+  - intent: say_purpose
+  - action: utter_purpose
+- rule: explain
+  steps:
+  - intent: explain
+  - action: utter_explanation
+- rule: Schedule a reminder
+  steps:
+  - intent: ask_remind_call
+    entities:
+      - PERSON
+  - action: action_set_reminder
+- rule: forget reminder
+  steps:
+  - intent: ask_forget_reminders
+  - action: action_forget_reminders
+- rule: say goodbye
+  steps:
+  - intent: bye
   - action: utter_goodbye
-
-- rule: Say 'I am a bot' anytime the user challenges
+- rule: Trigger `action_react_to_reminder` for `EXTERNAL_reminder`
   steps:
-  - intent: bot_challenge
-  - action: utter_iamabot
+  - intent: EXTERNAL_reminder
+  - action: action_react_to_reminder

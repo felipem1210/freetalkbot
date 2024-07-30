@@ -1,91 +1,80 @@
 version: "3.1"
-
 nlu:
-- intent: greet
-  examples: |
-    - hey
-    - hello
-    - hi
-    - hello there
-    - good morning
-    - good evening
-    - moin
-    - hey there
-    - let's go
-    - hey dude
-    - goodmorning
-    - goodevening
-    - good afternoon
+  - intent: greet
+    examples: |
+      - hey
+      - hello
+      - hi
+      - good morning
+      - good evening
+      - hey there
+      - hello there
+      - hi there
+      - hey assistant, how are you?
+      - hello assistant, how are you?
+      - hi assistant, how are you?
+      - good morning assistant, how are you?
+      - good evening assistant, how are you?
+  
+  - intent: say_purpose
+    examples: |
+      - what is your purpose?
+      - what can you do?
+      - what are you for?
+      - what is your goal?
+      - what is your aim?
+      - what is your function?
+      - what is your role?
+      - what is your job?
+      - what is your task?
+      - what is your mission?
+      - what is your objective?
+      - what is your intention?
+      - what is your ambition?
+      - what is your aspiration?
+      - what is your target?
+      - what is your purpose in life?
+      - what is your purpose in this world?
 
-- intent: goodbye
-  examples: |
-    - cu
-    - good by
-    - cee you later
-    - good night
-    - bye
-    - goodbye
-    - have a nice day
-    - see you around
-    - bye bye
-    - see you later
+  - intent: explain
+    examples: |
+      - can you explain me how you work?
+      - can you explain me how you function?
+      - can you explain me how you operate?
+      - can you explain me how you run?
+      - can you explain me how you roll?
+      - can you explain me how you go?
+  
+  - intent: bye
+    examples: |
+      - bye
+      - good bye
+      - ciao
+      - see you
+      - see ya
 
-- intent: affirm
-  examples: |
-    - yes
-    - y
-    - indeed
-    - of course
-    - that sounds good
-    - correct
+  - intent: ask_remind_call
+    examples: |
+      - remind me to call John
+      - remind me to call Lis
+      - remind me to call Albert
+      - remind me to call Susan
+      - later I have to call Alan
+      - later I have to call Jessie
+      - later I have to call Alex
+      - Please, remind me to call Vova
+      - please remind me to call Tanja
+      - I must not forget to call Santa
+      - I must not forget to call Daksh
+      - I must not forget to call Juste
 
-- intent: deny
-  examples: |
-    - no
-    - n
-    - never
-    - I don't think so
-    - don't like that
-    - no way
-    - not really
-
-- intent: mood_great
-  examples: |
-    - perfect
-    - great
-    - amazing
-    - feeling like a king
-    - wonderful
-    - I am feeling very good
-    - I am great
-    - I am amazing
-    - I am going to save the world
-    - super stoked
-    - extremely good
-    - so so perfect
-    - so good
-    - so perfect
-
-- intent: mood_unhappy
-  examples: |
-    - my day was horrible
-    - I am sad
-    - I don't feel very well
-    - I am disappointed
-    - super sad
-    - I'm so sad
-    - sad
-    - very sad
-    - unhappy
-    - not good
-    - not very good
-    - extremly sad
-    - so saad
-    - so sad
-
-- intent: bot_challenge
-  examples: |
-    - are you a bot?
-    - are you a human?
-    - am I talking to a bot?
-    - am I talking to a human?
+  - intent: ask_forget_reminders
+    examples: |
+      - forget about it
+      - don't remind me!
+      - Forget about the reminder
+      - do not remind me
+      - cancel the reminder
+      - cancel all reminders please
+      - Forget reminding me
+      - Forget reminding me!
