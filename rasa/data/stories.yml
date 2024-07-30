@@ -3,6 +3,6 @@ stories:
   - story: Happy path
     steps:
     - intent: greet
-    - action: utter_what_can_do
+    - action: utter_greet
     - intent: ask_remind_call
     - action: action_set_reminder

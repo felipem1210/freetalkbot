@@ -6,7 +6,6 @@ import (
 	"os"
 
 	audiosocketserver "github.com/felipem1210/freetalkbot/com-channels/audiosocket-server"
-	"github.com/felipem1210/freetalkbot/com-channels/rasa"
 	"github.com/felipem1210/freetalkbot/com-channels/whatsapp"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
@@ -27,7 +26,7 @@ var prCmd = &cobra.Command{
 			audiosocketserver.InitializeServer()
 		} else if comChan == "whatsapp" {
 			validateEnv([]string{"RASA_URL", "SQL_DB_FILE_NAME"})
-			go rasa.InitializeCallbackServer()
+			go whatsapp.InitializeCallbackServer()
 			whatsapp.InitializeServer()
 		}
 	},

@@ -8,9 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-
-	"github.com/felipem1210/freetalkbot/com-channels/whatsapp"
-	"github.com/gin-gonic/gin"
 )
 
 // Define a structure to match the JSON response
@@ -18,32 +15,6 @@ type Response struct {
 	RecipientId string `json:"recipient_id"`
 	Text        string `json:"text"`
 	//Image       string `json:"image"`
-}
-
-func InitializeCallbackServer() {
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
-	router.POST("/bot", handleBotEndpoint)
-	log.Println("Starting callback server on port 5034")
-	router.Run(":5034")
-}
-
-func handleBotEndpoint(c *gin.Context) {
-	var requestBody map[string]interface{}
-	if err := c.BindJSON(&requestBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
-		return
-	}
-	fmt.Printf("Request body: %v\n", requestBody)
-	recipientID := fmt.Sprintf("%v", requestBody["recipient_id"])
-	text := fmt.Sprintf("%v", requestBody["text"])
-	callbackResponse := &Response{
-		RecipientId: recipientID,
-		Text:        text,
-		//Image:       fmt.Sprintf("%v", requestBody["image"]),
-	}
-	whatsapp.SendWhatsappResponse(recipientID, callbackResponse)
-	c.JSON(http.StatusOK, callbackResponse)
 }
 
 func SendMessage(e string, jid string, m string) io.ReadCloser {
@@ -71,14 +42,14 @@ func SendMessage(e string, jid string, m string) io.ReadCloser {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Error response from server: %s", body)
+		log.Fatalf("Error response from server: %s", body)
 		return nil
 	}
 
 	return resp.Body
 }
 
-func HandleResponseBody(respBody io.ReadCloser) Response {
+func HandleResponseBody(respBody io.ReadCloser) []Response {
 	var responses []Response
 	if respBody == nil {
 		log.Println("Received a nil response body")
@@ -87,15 +58,14 @@ func HandleResponseBody(respBody io.ReadCloser) Response {
 	if err != nil {
 		log.Fatalf("Error reading response: %s", err)
 	}
-	fmt.Printf("Response: %s\n", body)
 	if json.Valid(body) {
 		err = json.Unmarshal(body, &responses)
 		if err != nil {
-			log.Printf("Error parsing JSON response: %s", err)
+			log.Fatalf("Error parsing JSON response: %s", err)
 		}
 	} else {
-		log.Printf("Received non-JSON response: %s", body)
+		log.Fatalf("Received non-JSON response: %s", body)
 	}
 	defer respBody.Close()
-	return responses[0]
+	return responses
 }

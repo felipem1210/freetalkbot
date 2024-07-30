@@ -2,13 +2,14 @@ package openai
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/sashabaranov/go-openai"
 )
 
-func CreateOpenAiClient() *openai.Client {
+type Client *openai.Client
+
+func CreateNewClient() *openai.Client {
 	openAiToken := os.Getenv("OPENAI_TOKEN")
 	return openai.NewClient(openAiToken)
 }
@@ -27,7 +28,7 @@ func TranscribeAudio(c *openai.Client, audioPath string) (string, error) {
 	return resp.Text, nil
 }
 
-func TranslateText(c *openai.Client, text string) (string, error) {
+func ConsultChatGpt(c *openai.Client, consult string) (string, error) {
 	resp, err := c.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
@@ -35,7 +36,7 @@ func TranslateText(c *openai.Client, text string) (string, error) {
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: fmt.Sprintf("Hello, translate this %s to english, if it is already in english, do nothing", text),
+					Content: consult,
 				},
 			},
 		},

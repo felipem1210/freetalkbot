@@ -8,7 +8,43 @@ nlu:
       - good morning
       - good evening
       - hey there
+      - hello there
+      - hi there
+      - hey assistant, how are you?
+      - hello assistant, how are you?
+      - hi assistant, how are you?
+      - good morning assistant, how are you?
+      - good evening assistant, how are you?
+  
+  - intent: say_purpose
+    examples: |
+      - what is your purpose?
+      - what can you do?
+      - what are you for?
+      - what is your goal?
+      - what is your aim?
+      - what is your function?
+      - what is your role?
+      - what is your job?
+      - what is your task?
+      - what is your mission?
+      - what is your objective?
+      - what is your intention?
+      - what is your ambition?
+      - what is your aspiration?
+      - what is your target?
+      - what is your purpose in life?
+      - what is your purpose in this world?
 
+  - intent: explain
+    examples: |
+      - can you explain me how you work?
+      - can you explain me how you function?
+      - can you explain me how you operate?
+      - can you explain me how you run?
+      - can you explain me how you roll?
+      - can you explain me how you go?
+  
   - intent: bye
     examples: |
       - bye
@@ -31,13 +67,6 @@ nlu:
       - I must not forget to call Santa
       - I must not forget to call Daksh
       - I must not forget to call Juste
-
-  - intent: ask_id
-    examples: |
-      - what's the conversation id?
-      - id
-      - What is the ID of this conversation?
-      - How do I send a POST request to this conversation?
 
   - intent: ask_forget_reminders
     examples: |

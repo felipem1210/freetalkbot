@@ -14,7 +14,7 @@ import (
 
 	"github.com/creack/pty"
 	openai "github.com/felipem1210/freetalkbot/genai/openai"
-	"github.com/felipem1210/freetalkbot/rasa"
+	rasa "github.com/felipem1210/freetalkbot/rasa"
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
@@ -32,7 +32,17 @@ const (
 	audioDir     = "audios/"
 )
 
-var client *whatsmeow.Client
+var (
+	chatgptQueries = map[string]string{
+		"translation_english": "Hello, translate this %s to english, if it is already in english, do nothing",
+		"language":            "Hello, please identify the language of this text: %s. Give me only the language name",
+		"translation":         "Hello, translate this %s to this language %s.",
+	}
+)
+
+var whatsappClient *whatsmeow.Client
+var openaiClient openai.Client
+var language string
 
 func GetEventHandler() func(interface{}) {
 	return func(evt interface{}) {
@@ -48,56 +58,64 @@ func handleMessageEvent(v *events.Message) {
 	jid := v.Info.Sender.String()
 
 	if messageBody != "" {
-		fmt.Printf("Message from %s: %s\n", jid, messageBody)
-		openAiClient := openai.CreateOpenAiClient()
-		translation, _ := openai.TranslateText(openAiClient, messageBody)
+		log.Printf("Message from %s\n", jid)
+		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], messageBody))
 		respBody := rasa.SendMessage("webhooks/rest/webhook", jid, translation)
-		fmt.Printf("Response from Rasa: %s", respBody)
-		response := rasa.HandleResponseBody(respBody)
-
-		SendWhatsappResponse(jid, response)
+		responses := rasa.HandleResponseBody(respBody)
+		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], messageBody))
+		for _, response := range responses {
+			responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
+			response.Text = responseTranslated
+			sucess := sendWhatsappResponse(jid, &response)
+			log.Println(sucess)
+		}
 
 	}
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
-		translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		transcription, translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], transcription))
 		if err != nil {
 			log.Printf("Error handling audio message: %s", err)
 			return
 		}
+
 		_ = rasa.SendMessage("webhooks/callback/webhook", jid, translation)
 	}
 }
 
-func SendWhatsappResponse(to string, response rasa.Response) {
+func sendWhatsappResponse(to string, response *rasa.Response) string {
 	jid, err := types.ParseJID(to)
 	if err != nil {
 		log.Fatalf("Invalid JID: %v", to)
 	}
-	finalResponse := response.Text
-	// if response.Image != "" && response.Image != "<nil>" {
-	// 	finalResponse = response.Image
-	// }
-	client.SendMessage(context.Background(), jid, &waE2E.Message{
-		Conversation: proto.String(finalResponse),
+	_, err = whatsappClient.SendMessage(context.Background(), jid, &waE2E.Message{
+		Conversation: proto.String(response.Text),
 	})
+	if err != nil {
+		log.Fatalf("Failed to send message: %v", err)
+	}
+	return fmt.Sprintf("Message sent to %s", to)
 }
 
-func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, error) {
+func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, string, error) {
 	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
 	if err := downloadAudio(audioMessage.GetURL(), audioEncPath); err != nil {
-		return "", err
+		return "", "", err
 	}
 	audioFilePath := fmt.Sprintf("%s%s.ogg", audioDir, messageId)
 	if err := decryptAudioFile(audioEncPath, audioFilePath, mediaKeyHex); err != nil {
-		return "", err
+		return "", "", err
 	}
-	openAiClient := openai.CreateOpenAiClient()
-	transcription, err := openai.TranscribeAudio(openAiClient, audioFilePath)
+	transcription, err := openai.TranscribeAudio(openaiClient, audioFilePath)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return openai.TranslateText(openAiClient, transcription)
+	translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], transcription))
+	if err != nil {
+		return "", "", err
+	}
+	return transcription, translation, nil
 }
 
 func decryptAudioFile(inputFilePath, outputFilePath, mediaKey string) error {
@@ -150,10 +168,12 @@ func InitializeServer() {
 		log.Fatalf("Failed to get device: %v", err)
 	}
 
+	openaiClient = openai.CreateNewClient()
+
 	clientLog := waLog.Stdout("Client", "INFO", true)
-	client = whatsmeow.NewClient(deviceStore, clientLog)
-	client.AddEventHandler(GetEventHandler())
-	handleClientConnection(client)
+	whatsappClient = whatsmeow.NewClient(deviceStore, clientLog)
+	whatsappClient.AddEventHandler(GetEventHandler())
+	handleClientConnection(whatsappClient)
 }
 
 func handleClientConnection(client *whatsmeow.Client) {

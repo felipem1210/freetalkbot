@@ -3,7 +3,15 @@ rules:
 - rule: greet
   steps:
   - intent: greet
-  - action: utter_what_can_do
+  - action: utter_greet
+- rule: explain purpose
+  steps:
+  - intent: say_purpose
+  - action: utter_purpose
+- rule: explain
+  steps:
+  - intent: explain
+  - action: utter_explanation
 - rule: Schedule a reminder
   steps:
   - intent: ask_remind_call
@@ -18,14 +26,6 @@ rules:
   steps:
   - intent: bye
   - action: utter_goodbye
-- rule: convo action_tell_id
-  steps:
-  - intent: ask_id
-  - action: action_tell_id
-- rule: warn dry plant
-  steps:
-  - intent: EXTERNAL_dry_plant
-  - action: action_warn_dry
 - rule: Trigger `action_react_to_reminder` for `EXTERNAL_reminder`
   steps:
   - intent: EXTERNAL_reminder

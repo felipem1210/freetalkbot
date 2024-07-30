@@ -1,7 +1,5 @@
 module github.com/felipem1210/freetalkbot
 
-//replace github.com/felipem1210/freetalkbot/cmd => ./cmd
-
 go 1.22.1
 
 require (
