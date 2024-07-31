@@ -21,6 +21,8 @@ services:
   rasa:
     build:
       context: ./rasa
+    env_file:
+      - .env
     volumes:
       - ./rasa:/app
     command: 
@@ -35,6 +37,8 @@ services:
 
   rasa-actions-server:
     image: khalosa/rasa-aarch64:3.5.2
+    env_file:
+      - .env
     volumes:
       - ./rasa:/app
     command: 
