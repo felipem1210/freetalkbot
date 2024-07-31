@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"syscall"
 
 	"github.com/creack/pty"
@@ -60,27 +61,40 @@ func handleMessageEvent(v *events.Message) {
 	if messageBody != "" {
 		log.Printf("Message from %s\n", jid)
 		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], messageBody))
-		respBody := rasa.SendMessage("webhooks/rest/webhook", jid, translation)
-		responses := rasa.HandleResponseBody(respBody)
+		rasaUri := chooseRasaUri(translation)
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], messageBody))
-		for _, response := range responses {
-			responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
-			response.Text = responseTranslated
-			sucess := sendWhatsappResponse(jid, &response)
-			log.Println(sucess)
+		respBody := rasa.SendMessage(rasaUri, jid, translation)
+		if rasaUri == "webhooks/rest/webhook" {
+			responses := rasa.HandleResponseBody(respBody)
+			for _, response := range responses {
+				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
+				response.Text = responseTranslated
+				sucess := sendWhatsappResponse(jid, &response)
+				log.Println(sucess)
+			}
 		}
-
 	}
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
 		transcription, translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		rasaUri := chooseRasaUri(transcription)
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], transcription))
 		if err != nil {
 			log.Printf("Error handling audio message: %s", err)
 			return
 		}
 
-		_ = rasa.SendMessage("webhooks/callback/webhook", jid, translation)
+		_ = rasa.SendMessage(rasaUri, jid, translation)
+	}
+}
+
+func chooseRasaUri(text string) string {
+	fmt.Println(text)
+	re := regexp.MustCompile(`remember.*|remind.*|remind`)
+	if re.MatchString(text) {
+		return "webhooks/callback/webhook"
+	} else {
+		return "webhooks/rest/webhook"
 	}
 }
 

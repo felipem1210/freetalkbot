@@ -14,9 +14,9 @@ rules:
   - action: utter_explanation
 - rule: Schedule a reminder
   steps:
-  - intent: ask_remind_call
+  - intent: ask_remind
     entities:
-      - PERSON
+      - REMINDER
   - action: action_set_reminder
 - rule: forget reminder
   steps:

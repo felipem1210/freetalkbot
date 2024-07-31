@@ -32,8 +32,8 @@ func handleBotEndpoint(c *gin.Context) {
 		RecipientId: recipientID,
 		Text:        text,
 	})
-	//sendGetRequest(language)
 	for _, response := range callbackResponses {
+		fmt.Println(response.Text)
 		responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
 		response.Text = responseTranslated
 		sendWhatsappResponse(recipientID, &response)
