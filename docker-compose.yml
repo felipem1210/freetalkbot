@@ -1,22 +1,50 @@
 version: '3.7'
 
 services:
+
   asterisk:
     platform: linux/amd64
     image: mlan/asterisk:full
-    network_mode: host
+    networks: 
+      - freetalkbot
+    ports:
+      - 6569:4569/udp
+      - 6050:5060/udp
+      - 10000-10099:10000-10099/udp
     cap_add:
-      - sys_ptrace
-      - net_admin
-      - net_raw
+      - sys_ptrace                          # Only here to help testing
+      - net_admin                           # Allow NFT, used by AutoBan
+      - net_raw                             # Allow NFT, used by AutoBan
     environment:
-      - SYSLOG_LEVEL=${SYSLOG_LEVEL-4}
+      - SYSLOG_LEVEL=${SYSLOG_LEVEL-4}      # Logging
       - HOSTNAME=asterisk.docker.localhost
     volumes:
-      - asterisk-conf:/srv
+      - asterisk-conf:/srv                      # Persistent storage
       - ./asterisk/container-config:/etc/asterisk
-      - ./pulse:/run/pulse:rshared
-      - /etc/localtime:/etc/localtime:ro
+      - ./pulse:/run/pulse:rshared          # Use host audio
+      - /etc/localtime:/etc/localtime:ro    # Use host timezone    
+
+  gobot_voip:
+    build:
+      context: .
+    image: freetalk/freetalkbot:latest
+    networks: 
+      - freetalkbot
+    command: ["./freetalkbot", "init", "--communication-channel", "audio"]
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+
+  gobot_whatsapp:
+    build:
+      context: .
+    image: freetalk/freetalkbot:latest
+    networks: 
+      - freetalkbot
+    command: ["./freetalkbot", "init", "--communication-channel", "whatsapp"]
+    env_file:
+      - .env
 
   rasa:
     build:
