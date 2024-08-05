@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 
-	audiosocketserver "github.com/felipem1210/freetalkbot/com-channels/audiosocket-server"
-	"github.com/felipem1210/freetalkbot/com-channels/whatsapp"
-	"github.com/joho/godotenv"
+	audiosocketserver "github.com/felipem1210/freetalkbot/packages/audiosocket"
+	"github.com/felipem1210/freetalkbot/packages/whatsapp"
 	"github.com/spf13/cobra"
 )
 
@@ -18,10 +16,6 @@ var prCmd = &cobra.Command{
 	Long:  `Initialize the bot.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		comChan, _ := cmd.Flags().GetString("communication-channel")
-		err := godotenv.Load()
-		if err != nil {
-			log.Fatalf("Error loading .env file: %s", err)
-		}
 		if comChan == "audio" {
 			audiosocketserver.InitializeServer()
 		} else if comChan == "whatsapp" {

@@ -27,7 +27,9 @@ services:
   gobot_voip:
     build:
       context: .
-    image: freetalk/freetalkbot:latest
+      args:
+        - SQL_DB_FILE_NAME=${SQL_DB_FILE_NAME}
+    platform: linux/amd64
     networks: 
       - freetalkbot
     command: ["./freetalkbot", "init", "--communication-channel", "audio"]
@@ -39,12 +41,21 @@ services:
   gobot_whatsapp:
     build:
       context: .
-    image: freetalk/freetalkbot:latest
+      args:
+        - SQL_DB_FILE_NAME=${SQL_DB_FILE_NAME}
+    platform: linux/amd64
+    stdin_open: true
+    tty: true
     networks: 
       - freetalkbot
     command: ["./freetalkbot", "init", "--communication-channel", "whatsapp"]
+    ports:
+      - "443:443"
+      - "5034:5034"
     env_file:
       - .env
+    volumes:
+      - whatsapp:/app/
 
   rasa:
     build:
@@ -79,6 +90,7 @@ services:
 
 volumes:
   asterisk-conf:
+  whatsapp:
 
 networks:
   freetalkbot:

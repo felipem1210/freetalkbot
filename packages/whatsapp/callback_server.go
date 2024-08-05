@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	openai "github.com/felipem1210/freetalkbot/genai/openai"
-	rasa "github.com/felipem1210/freetalkbot/rasa"
+	openai "github.com/felipem1210/freetalkbot/packages/openai"
+	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/gin-gonic/gin"
 )
 

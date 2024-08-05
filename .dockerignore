@@ -1,0 +1,17 @@
+docker-compose.yml
+Dockerfile
+asterisk/
+audios/
+docs/
+.air.toml
+.env.example
+.env
+.gitignore
+.github/
+Makefile
+README.md
+LICENSE
+*.db
+.air.toml
+.git/
+rasa/

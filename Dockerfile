@@ -1,41 +1,54 @@
-# Usar una imagen base de Go para la etapa de construcción
+# Use a Go base image for the build stage
 FROM golang:1.22-bookworm AS builder
 
-# Instalar gcc y otras herramientas necesarias para CGO
+# Install gcc and other necessary tools for CGO
 RUN apt-get update && apt-get install -y gcc
 
-# Establecer el directorio de trabajo dentro del contenedor
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copiar los archivos go.mod y go.sum y descargar las dependencias
+# Copy the go.mod and go.sum files and download dependencies
 COPY go.mod go.sum ./
-RUN go mod tidy
 
-# Copiar el código fuente al directorio de trabajo
+RUN go get github.com/ddz/whatsapp-media-decrypt && \
+    go install github.com/ddz/whatsapp-media-decrypt
+
+RUN which whatsapp-media-decrypt
+
+RUN go mod tidy && go mod download 
+
+# Copy the source code to the working directory
 COPY . .
 
-# Habilitar CGO y construir el binario para la aplicación principal
+# Enable CGO and build the binary for the main application
 ENV CGO_ENABLED=1 GOOS=linux GOARCH=amd64
 RUN go build -tags sqlite_omit_load_extension -o /freetalkbot main.go
 
-# Crear una imagen mínima para ejecutar el binario
+# Create a minimal image to run the binary
 FROM debian:bookworm-slim
 
-# Instalar las dependencias necesarias para la ejecución
-RUN apt-get update && apt-get install -y ca-certificates tzdata sqlite3 gcc
+ARG SQL_DB_FILE_NAME
 
-# Establecer el directorio de trabajo dentro del contenedor
-WORKDIR /root/
+# Install necessary runtime dependencies
+RUN apt-get update && apt-get install -y ca-certificates tzdata sqlite3
 
-# Copiar el binario desde la etapa de construcción
+
+# Create a non-root user to run the application
+#RUN useradd -u 1001 freetalkbot
+#USER freetalkbot
+
+# Set the working directory inside the container
+WORKDIR /app/
+
+RUN touch /app/${SQL_DB_FILE_NAME} && \
+    mkdir /app/audios
+
+# Copy the binary from the build stage
 COPY --from=builder /freetalkbot .
+COPY --from=builder /go/bin/whatsapp-media-decrypt /usr/local/bin/whatsapp-media-decrypt
 
-# Copiar archivos de configuración y scripts necesarios
-COPY --from=builder /app/.env ./.env
+# Expose the ports that the application will use
+EXPOSE 8080 443 5034
 
-# Exponer los puertos que utilizará la aplicación
-EXPOSE 8080
-EXPOSE 443
-
-# Comando por defecto para ejecutar la aplicación
+# Default command to run the application
 CMD ["./freetalkbot"]

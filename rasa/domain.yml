@@ -7,20 +7,20 @@ intents:
 - greet
 - explain
 - say_purpose
-- ask_remind_call
+- ask_remind
 - ask_forget_reminders
 - bye
 - EXTERNAL_reminder
 - EXT_reminder
 entities:
-- PERSON
+- REMINDER
 slots:
-  PERSON:
+  REMINDER:
     type: text
     influence_conversation: false
     mappings:
     - type: from_entity
-      entity: PERSON
+      entity: REMINDER
 responses:
   utter_greet:
   - text: Hey! how are you? In case you asked, I am good, I am a reminders assistant. How can I help you?
