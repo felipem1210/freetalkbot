@@ -20,8 +20,11 @@ The components added in the `docker-compose.yml` file are:
 
 * Asterisk
 * [Rasa assistant](https://rasa.com/)
+* Rasa Actions server
+* Audio bot server
+* Whatsapp bot server
 
-Raise up the development environment with `docker-compose up -d`
+Raise up the development environment with `docker-compose up -d --build`
 
 ### Configure asterisk
 
@@ -46,27 +49,23 @@ If you modify any of the rasa files you will need to retrain the assistant, you 
 
 ## Audio bot
 
-```sh
-go run main.go init -c audio
-```
+The docker-compose file alreay has it included, but if you want to develop on it locally:
 
-with air
+1. Change envars in `.env` file:
 
 ```sh
-make run-audio
+RASA_URL=http://localhost:5005
+CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
 ```
+
+2. Set the envars with `export $(cat ./.env | xargs)`
+
+3. Run `make run-local-audio`
+
 
 ## Whatsapp bot
 
-```sh
-go run main.go init -c whatsapp
-```
-
-with air
-
-```sh
-make run-whatsapp
-```
+Same variables than audio bot are needed, just change the make command `make run-local-whatsapp`
 
 After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
 If you can't scan the QR code you can also link the whatsapp account using a pair code. For that you must set the envar `PAIR_PHONE_NUMBER` with 
@@ -75,5 +74,5 @@ The whatsapp server store session in sqlite, so you will see a `.db` file. If yo
 
 ### Features
 
-Now the code is prepared to receive text or voice messages. If you want to make assistant based on text you should modify it.
+Now the code is prepared to receive text or voice messages.
 The assistant on this repository is a `reminderbot` that will send you reminders based on voice messages that you are sending to it 

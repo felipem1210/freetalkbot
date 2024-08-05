@@ -14,10 +14,10 @@ rules:
   - action: utter_explanation
 - rule: Schedule a reminder
   steps:
-  - intent: ask_remind_call
-    entities:
-      - PERSON
+  - intent: ask_remind
   - action: action_set_reminder
+    # entities:
+    #   - REMINDER
 - rule: forget reminder
   steps:
   - intent: ask_forget_reminders

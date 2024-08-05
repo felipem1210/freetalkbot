@@ -53,20 +53,18 @@ nlu:
       - see you
       - see ya
 
-  - intent: ask_remind_call
+  - intent: ask_remind
     examples: |
-      - remind me to call John
-      - remind me to call Lis
-      - remind me to call Albert
-      - remind me to call Susan
-      - later I have to call Alan
-      - later I have to call Jessie
-      - later I have to call Alex
-      - Please, remind me to call Vova
-      - please remind me to call Tanja
-      - I must not forget to call Santa
-      - I must not forget to call Daksh
-      - I must not forget to call Juste
+      - remind me
+      - remind me to
+      - remind me that
+      - remind me about
+      - remind me to do
+      - remind me to call
+      - later I have to
+      - please remind me to
+      - I must not forget 
+      - I have to not forget
 
   - intent: ask_forget_reminders
     examples: |

@@ -10,12 +10,12 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"syscall"
 
 	"github.com/creack/pty"
-	openai "github.com/felipem1210/freetalkbot/genai/openai"
-	rasa "github.com/felipem1210/freetalkbot/rasa"
-	"github.com/joho/godotenv"
+	openai "github.com/felipem1210/freetalkbot/packages/openai"
+	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	audioEncPath = "audios/audio.enc"
 	audioDir     = "audios/"
+	audioEncPath = audioDir + "audio.enc"
 )
 
 var (
@@ -60,27 +60,37 @@ func handleMessageEvent(v *events.Message) {
 	if messageBody != "" {
 		log.Printf("Message from %s\n", jid)
 		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], messageBody))
-		respBody := rasa.SendMessage("webhooks/rest/webhook", jid, translation)
-		responses := rasa.HandleResponseBody(respBody)
-		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], messageBody))
-		for _, response := range responses {
-			responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
-			response.Text = responseTranslated
-			sucess := sendWhatsappResponse(jid, &response)
-			log.Println(sucess)
+		rasaUri := chooseRasaUri(translation)
+		respBody := rasa.SendMessage(rasaUri, jid, translation)
+		if rasaUri == "webhooks/rest/webhook" {
+			responses := rasa.HandleResponseBody(respBody)
+			for _, response := range responses {
+				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
+				response.Text = responseTranslated
+				_ = sendWhatsappResponse(jid, &response)
+			}
 		}
-
 	}
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
 		transcription, translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		rasaUri := chooseRasaUri(translation)
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], transcription))
 		if err != nil {
 			log.Printf("Error handling audio message: %s", err)
 			return
 		}
 
-		_ = rasa.SendMessage("webhooks/callback/webhook", jid, translation)
+		_ = rasa.SendMessage(rasaUri, jid, translation)
+	}
+}
+
+func chooseRasaUri(text string) string {
+	re := regexp.MustCompile(`Remember|remember|remember.*|remind.*|remind`)
+	if re.MatchString(text) {
+		return "webhooks/callback/webhook"
+	} else {
+		return "webhooks/rest/webhook"
 	}
 }
 
@@ -152,9 +162,6 @@ func downloadAudio(url, dest string) error {
 }
 
 func InitializeServer() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %s", err)
-	}
 	sqlDbFileName := os.Getenv("SQL_DB_FILE_NAME")
 	dbLog := waLog.Stdout("Database", "INFO", true)
 
