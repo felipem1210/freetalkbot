@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 )
 
 // Define a structure to match the JSON response
@@ -15,6 +16,15 @@ type Response struct {
 	RecipientId string `json:"recipient_id"`
 	Text        string `json:"text"`
 	//Image       string `json:"image"`
+}
+
+func ChooseUri(text string) string {
+	re := regexp.MustCompile(`Remember|remember|remember.*|remind.*|remind`)
+	if re.MatchString(text) {
+		return "webhooks/callback/webhook"
+	} else {
+		return "webhooks/rest/webhook"
+	}
 }
 
 func SendMessage(e string, jid string, m string) io.ReadCloser {
