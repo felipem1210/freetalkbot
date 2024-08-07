@@ -34,9 +34,10 @@ Raise up the development environment with `docker-compose up -d --build`
 
 Asterisk is raised up in network_mode host. The asterisk configuration files are mapped in folder `asterisk/container-config`
 
-### Register SIP endpoint
+### Register SIP/IAX endpoint
 
-Checkout pjsip_endpoint.conf file in `asterisk/container-config` folder.
+* For SIP checkout `pjsip_endpoint.conf` file in `asterisk/container-config` folder.
+* For IAX checkout iax.conf file in `asterisk/local-config` folder.
 
 ### Rasa assistant
 

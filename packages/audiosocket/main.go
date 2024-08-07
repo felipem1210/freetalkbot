@@ -131,7 +131,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 			if err != nil {
 				log.Fatalf("failed to transcribe audio: %v", err)
 			}
-			//language, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
+			language, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
 			if err != nil {
 				log.Fatalf("failed to detect language: %v", err)
 			}
@@ -143,8 +143,10 @@ func Handle(pCtx context.Context, c net.Conn) {
 			respBody := rasa.SendMessage("webhooks/rest/webhook", id.String(), translation)
 			responses := rasa.HandleResponseBody(respBody)
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
+			picoTtsLanguage := choosePicoTtsLanguage(language)
 			for _, response := range responses {
-				picoTtsCmd := fmt.Sprintf("pico2wave -l en-US -w %s \"%s\"", responseAudioFile, response.Text)
+				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+				picoTtsCmd := fmt.Sprintf("pico2wave -l %s -w %s \"%s\"", picoTtsLanguage, responseAudioFile, responseTranslated)
 				err := common.ExecuteCommand(picoTtsCmd)
 				if err != nil {
 					log.Fatalf("failed to generate audio response: %v", err)
@@ -157,6 +159,25 @@ func Handle(pCtx context.Context, c net.Conn) {
 			}
 		}
 		i++
+	}
+}
+
+func choosePicoTtsLanguage(language string) string {
+	switch language {
+	case "English":
+		return "en-US"
+	case "Spanish":
+		return "es-ES"
+	case "French":
+		return "fr-FR"
+	case "German":
+		return "de-DE"
+	case "Italian":
+		return "it-IT"
+	case "Portuguese":
+		return "pt-PT"
+	default:
+		return "en-US"
 	}
 }
 
