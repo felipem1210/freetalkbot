@@ -25,11 +25,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	audioDir     = "audios/"
-	audioEncPath = audioDir + "audio.enc"
-)
-
 var whatsappClient *whatsmeow.Client
 var openaiClient openai.Client
 var language string
@@ -91,11 +86,11 @@ func sendWhatsappResponse(to string, response *rasa.Response) string {
 
 func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, string, error) {
 	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
-	if err := downloadAudio(audioMessage.GetURL(), audioEncPath); err != nil {
+	if err := downloadAudio(audioMessage.GetURL(), common.AudioEncPath); err != nil {
 		return "", "", err
 	}
-	audioFilePath := fmt.Sprintf("%s%s.ogg", audioDir, messageId)
-	if err := decryptAudioFile(audioEncPath, audioFilePath, mediaKeyHex); err != nil {
+	audioFilePath := fmt.Sprintf("%s%s.ogg", common.AudioDir, messageId)
+	if err := decryptAudioFile(common.AudioEncPath, audioFilePath, mediaKeyHex); err != nil {
 		return "", "", err
 	}
 	transcription, err := openai.TranscribeAudio(openaiClient, audioFilePath)

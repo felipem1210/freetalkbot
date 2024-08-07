@@ -121,13 +121,13 @@ func Handle(pCtx context.Context, c net.Conn) {
 			log.Println("user stopped speaking")
 			log.Println("sending audio")
 			start := time.Now()
-			audioFilePath := "output-" + strconv.Itoa(i) + ".wav"
-			err := saveToWAV(audioData, audioFilePath)
+			inputAudioFile := fmt.Sprintf("%s/output-%s.wav", common.AudioDir, strconv.Itoa(i))
+			err := saveToWAV(audioData, inputAudioFile)
 			if err != nil {
 				log.Fatalf("failed to save audio to wav: %v", err)
 			}
 			log.Println("completed audio save in", time.Since(start).Round(time.Second).String())
-			transcription, err := openai.TranscribeAudio(openaiClient, audioFilePath)
+			transcription, err := openai.TranscribeAudio(openaiClient, inputAudioFile)
 			if err != nil {
 				log.Fatalf("failed to transcribe audio: %v", err)
 			}
@@ -139,27 +139,22 @@ func Handle(pCtx context.Context, c net.Conn) {
 			if err != nil {
 				log.Fatalf("failed to translate transciption: %v", err)
 			}
-			deleteFile(audioFilePath)
+			deleteFile(inputAudioFile)
 			respBody := rasa.SendMessage("webhooks/rest/webhook", id.String(), translation)
 			responses := rasa.HandleResponseBody(respBody)
-			log.Printf("Responses %v\n", responses)
+			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			for _, response := range responses {
-				//responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
-				picoTtsCmd := fmt.Sprintf("pico2wave -l en-US -w response-%d.wav \"%s\"", i, response.Text)
+				picoTtsCmd := fmt.Sprintf("pico2wave -l en-US -w %s \"%s\"", responseAudioFile, response.Text)
 				err := common.ExecuteCommand(picoTtsCmd)
 				if err != nil {
 					log.Fatalf("failed to generate audio response: %v", err)
 				}
+				audioData, err := readWavFile(responseAudioFile)
+				if err != nil {
+					log.Fatalf("failed to read audio response: %v", err)
+				}
+				sendAudio(c, audioData)
 			}
-			// if err = sendAudio(c, audioData); err != nil {
-			// 	if strings.Contains(err.Error(), "broken pipe") {
-			// 		log.Println("Received hangup from asterisk")
-			// 	} else {
-			// 		log.Println("failed to send audio to Asterisk:", err)
-			// 	}
-			// 	return
-			// } else {
-			// }
 		}
 		i++
 	}
@@ -213,6 +208,21 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 			}
 		}
 	}
+}
+
+func readWavFile(filePath string) ([]byte, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 // sendAudio sends audio data to the Asterisk server

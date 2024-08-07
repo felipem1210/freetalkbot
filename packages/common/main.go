@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+const (
+	AudioDir     = "audios/"
+	AudioEncPath = AudioDir + "audio.enc"
+)
+
 var (
 	ChatgptQueries = map[string]string{
 		"translation_english": "Hello, translate this %s to english, if it is already in english, do nothing",
