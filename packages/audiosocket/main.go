@@ -1,7 +1,9 @@
 package audiosocketserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +19,7 @@ import (
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/pkg/errors"
+	"github.com/zaf/resample"
 )
 
 const (
@@ -139,7 +142,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 			if err != nil {
 				log.Fatalf("failed to translate transciption: %v", err)
 			}
-			deleteFile(inputAudioFile)
+			go deleteFile(inputAudioFile)
 			respBody := rasa.SendMessage("webhooks/rest/webhook", id.String(), translation)
 			responses := rasa.HandleResponseBody(respBody)
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
@@ -151,10 +154,11 @@ func Handle(pCtx context.Context, c net.Conn) {
 				if err != nil {
 					log.Fatalf("failed to generate audio response: %v", err)
 				}
-				audioData, err := readWavFile(responseAudioFile)
+				audioData, err := handleWavFile(responseAudioFile)
 				if err != nil {
 					log.Fatalf("failed to read audio response: %v", err)
 				}
+				go deleteFile(responseAudioFile)
 				sendAudio(c, audioData)
 			}
 		}
@@ -231,19 +235,48 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 	}
 }
 
-func readWavFile(filePath string) ([]byte, error) {
+func handleWavFile(filePath string) ([]byte, error) {
+	// Open the input WAV file
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		log.Fatalf("failed to open input file: %v", err)
 	}
 	defer file.Close()
 
+	// Get the WAV file sample rate
+	header := make([]byte, 44)
+	_, err = file.Read(header)
+	if err != nil {
+		log.Fatalf("failed to read WAV header: %v", err)
+	}
+	wavSampleRate := binary.LittleEndian.Uint32(header[24:28])
+
 	data, err := io.ReadAll(file)
 	if err != nil {
-		return nil, err
+		log.Fatalf("failed to read file data: %v", err)
+	}
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		log.Fatalf("failed to seek file: %v", err)
 	}
 
-	return data, nil
+	// Create a new resampler to convert the WAV file to PCM 16bit lineat 8kHz Mono
+	var out bytes.Buffer
+
+	resampler, err := resample.New(&out, float64(wavSampleRate), 8000, 1, 3, 6)
+	if err != nil {
+		log.Fatalf("failed to create resampler: %v", err)
+	}
+	_, err = resampler.Write(data[44:])
+	if err != nil {
+		return nil, fmt.Errorf("Write failed: %s", err)
+	}
+	err = resampler.Close()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to close Resampler:", err)
+	}
+
+	return out.Bytes(), nil
 }
 
 // sendAudio sends audio data to the Asterisk server

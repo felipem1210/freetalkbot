@@ -12,6 +12,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/sashabaranov/go-openai v1.27.0
 	github.com/spf13/cobra v1.8.1
+	github.com/zaf/resample v1.5.0
 	go.mau.fi/whatsmeow v0.0.0-20240625083845-6acab596dd8c
 	google.golang.org/protobuf v1.34.1
 )

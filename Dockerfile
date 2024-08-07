@@ -2,7 +2,11 @@
 FROM golang:1.22-alpine AS builder
 
 # Install gcc and other necessary tools for CGO
-RUN apk add --no-cache build-base
+RUN apk update && \
+    apk add --no-cache \
+    build-base \
+    soxr-dev \
+    pkgconf
 #git libtool m4 automake libpopt-dev
 
 # Set the working directory inside the container
@@ -29,7 +33,7 @@ RUN go build -tags sqlite_omit_load_extension -o /freetalkbot main.go
 FROM alpine:latest
 
 # Install necessary runtime dependencies
-RUN apk add ca-certificates tzdata sqlite picotts libc6-compat
+RUN apk add --no-cache ca-certificates tzdata sqlite picotts soxr 
 
 # Create a non-root user to run the application
 RUN addgroup -g 1001 freetalkbot && \
