@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/felipem1210/freetalkbot/packages/common"
 	openai "github.com/felipem1210/freetalkbot/packages/openai"
 	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/gin-gonic/gin"
@@ -34,7 +35,7 @@ func handleBotEndpoint(c *gin.Context) {
 	})
 	//sendGetRequest(language)
 	for _, response := range callbackResponses {
-		responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
+		responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
 		response.Text = responseTranslated
 		sendWhatsappResponse(recipientID, &response)
 	}

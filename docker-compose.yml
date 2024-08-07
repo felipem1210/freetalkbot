@@ -30,13 +30,17 @@ services:
       args:
         - SQL_DB_FILE_NAME=${SQL_DB_FILE_NAME}
     platform: linux/amd64
+    #stdin_open: true
+    #tty: true
     networks: 
       - freetalkbot
-    command: ["./freetalkbot", "init", "--communication-channel", "audio"]
+    command: ["freetalkbot", "init", "-c", "audio"]
     ports:
       - "8080:8080"
     env_file:
       - .env
+    volumes:
+      - app_data:/app/
 
   gobot_whatsapp:
     build:
@@ -44,18 +48,18 @@ services:
       args:
         - SQL_DB_FILE_NAME=${SQL_DB_FILE_NAME}
     platform: linux/amd64
-    stdin_open: true
-    tty: true
+    #stdin_open: true
+    #tty: true
     networks: 
       - freetalkbot
-    command: ["./freetalkbot", "init", "--communication-channel", "whatsapp"]
+    command: ["freetalkbot", "init", "-c", "whatsapp"]
     ports:
       - "443:443"
       - "5034:5034"
     env_file:
       - .env
     volumes:
-      - whatsapp:/app/
+      - app_data:/app/
 
   rasa:
     build:
@@ -90,7 +94,7 @@ services:
 
 volumes:
   asterisk-conf:
-  whatsapp:
+  app_data:
 
 networks:
   freetalkbot:

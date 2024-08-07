@@ -5,6 +5,7 @@ Your own IA to handle communications with your customers via phonecalls or whats
 
 * Go version recommended: 1.22
 * [whatsapp-media-decrypt](https://github.com/ddz/whatsapp-media-decrypt/tree/master) tool
+* [picotts](https://github.com/ihuguet/picotts)
 * Install dependencies with `go mod tidy`
 
 For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
@@ -76,3 +77,10 @@ The whatsapp server store session in sqlite, so you will see a `.db` file. If yo
 
 Now the code is prepared to receive text or voice messages.
 The assistant on this repository is a `reminderbot` that will send you reminders based on voice messages that you are sending to it 
+
+# Gratitude and Thanks
+
+The following projects inspired to the construction of this one:
+
+* [audiosocket] https://github.com/CyCoreSystems/audiosocket
+* [whatsmeow-quickstart] https://github.com/codespearhead/whatsmeow-quickstart

@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"net"
+	"os"
 
 	"github.com/CyCoreSystems/audiosocket"
 )
@@ -60,6 +61,13 @@ func calculateVolumeG711(buffer []byte) float64 {
 		sum += float64(sample) * float64(sample)
 	}
 	return math.Sqrt(sum / float64(sampleCount))
+}
+
+// delete a file
+func deleteFile(filename string) {
+	if err := os.Remove(filename); err != nil {
+		log.Println("Failed to delete file:", err)
+	}
 }
 
 // sendHangupSignal sends a hangup signal to the client

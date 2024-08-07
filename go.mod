@@ -4,7 +4,6 @@ go 1.22.1
 
 require (
 	github.com/CyCoreSystems/audiosocket v0.2.1
-	github.com/creack/pty v1.1.21
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0

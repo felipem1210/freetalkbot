@@ -8,12 +8,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
-	"regexp"
 	"syscall"
 
-	"github.com/creack/pty"
+	"github.com/felipem1210/freetalkbot/packages/common"
 	openai "github.com/felipem1210/freetalkbot/packages/openai"
 	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
 	_ "github.com/mattn/go-sqlite3"
@@ -25,19 +23,6 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
-)
-
-const (
-	audioDir     = "audios/"
-	audioEncPath = audioDir + "audio.enc"
-)
-
-var (
-	chatgptQueries = map[string]string{
-		"translation_english": "Hello, translate this %s to english, if it is already in english, do nothing",
-		"language":            "Hello, please identify the language of this text: %s. Give me only the language name",
-		"translation":         "Hello, translate this %s to this language %s.",
-	}
 )
 
 var whatsappClient *whatsmeow.Client
@@ -59,13 +44,13 @@ func handleMessageEvent(v *events.Message) {
 
 	if messageBody != "" {
 		log.Printf("Message from %s\n", jid)
-		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], messageBody))
-		rasaUri := chooseRasaUri(translation)
+		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], messageBody))
+		rasaUri := rasa.ChooseUri(translation)
 		respBody := rasa.SendMessage(rasaUri, jid, translation)
 		if rasaUri == "webhooks/rest/webhook" {
 			responses := rasa.HandleResponseBody(respBody)
 			for _, response := range responses {
-				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation"], response.Text, language))
+				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
 				response.Text = responseTranslated
 				_ = sendWhatsappResponse(jid, &response)
 			}
@@ -74,23 +59,14 @@ func handleMessageEvent(v *events.Message) {
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
 		transcription, translation, err := handleAudioMessage(audioMessage, v.Info.ID)
-		rasaUri := chooseRasaUri(translation)
-		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["language"], transcription))
+		rasaUri := rasa.ChooseUri(translation)
+		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
 		if err != nil {
 			log.Printf("Error handling audio message: %s", err)
 			return
 		}
 
 		_ = rasa.SendMessage(rasaUri, jid, translation)
-	}
-}
-
-func chooseRasaUri(text string) string {
-	re := regexp.MustCompile(`Remember|remember|remember.*|remind.*|remind`)
-	if re.MatchString(text) {
-		return "webhooks/callback/webhook"
-	} else {
-		return "webhooks/rest/webhook"
 	}
 }
 
@@ -110,18 +86,18 @@ func sendWhatsappResponse(to string, response *rasa.Response) string {
 
 func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, string, error) {
 	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
-	if err := downloadAudio(audioMessage.GetURL(), audioEncPath); err != nil {
+	if err := downloadAudio(audioMessage.GetURL(), common.AudioEncPath); err != nil {
 		return "", "", err
 	}
-	audioFilePath := fmt.Sprintf("%s%s.ogg", audioDir, messageId)
-	if err := decryptAudioFile(audioEncPath, audioFilePath, mediaKeyHex); err != nil {
+	audioFilePath := fmt.Sprintf("%s%s.ogg", common.AudioDir, messageId)
+	if err := decryptAudioFile(common.AudioEncPath, audioFilePath, mediaKeyHex); err != nil {
 		return "", "", err
 	}
 	transcription, err := openai.TranscribeAudio(openaiClient, audioFilePath)
 	if err != nil {
 		return "", "", err
 	}
-	translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(chatgptQueries["translation_english"], transcription))
+	translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], transcription))
 	if err != nil {
 		return "", "", err
 	}
@@ -130,14 +106,11 @@ func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (str
 
 func decryptAudioFile(inputFilePath, outputFilePath, mediaKey string) error {
 	cmdString := fmt.Sprintf("whatsapp-media-decrypt -o %s -t 3 %s %s", outputFilePath, inputFilePath, mediaKey)
-	cmd := exec.Command("/bin/sh", "-c", cmdString)
-	f, err := pty.Start(cmd)
+	err := common.ExecuteCommand(cmdString)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = io.Copy(os.Stdout, f)
-	return err
+	return nil
 }
 
 func downloadAudio(url, dest string) error {

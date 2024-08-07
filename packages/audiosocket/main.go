@@ -2,6 +2,7 @@ package audiosocketserver
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -10,6 +11,9 @@ import (
 	"time"
 
 	"github.com/CyCoreSystems/audiosocket"
+	"github.com/felipem1210/freetalkbot/packages/common"
+	"github.com/felipem1210/freetalkbot/packages/openai"
+	"github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/pkg/errors"
@@ -37,6 +41,8 @@ var (
 	err       error
 )
 
+var openaiClient openai.Client
+
 func init() {
 }
 
@@ -45,7 +51,7 @@ var ErrHangup = errors.New("Hangup")
 
 func InitializeServer() {
 	ctx := context.Background()
-
+	openaiClient = openai.CreateNewClient()
 	log.Println("listening for AudioSocket connections on", listenAddr)
 	if err = listen(ctx); err != nil {
 		log.Fatalln("listen failure:", err)
@@ -115,20 +121,40 @@ func Handle(pCtx context.Context, c net.Conn) {
 			log.Println("user stopped speaking")
 			log.Println("sending audio")
 			start := time.Now()
-			err := saveToWAV(audioData, "output-"+strconv.Itoa(i)+".wav")
+			inputAudioFile := fmt.Sprintf("%s/output-%s.wav", common.AudioDir, strconv.Itoa(i))
+			err := saveToWAV(audioData, inputAudioFile)
 			if err != nil {
 				log.Fatalf("failed to save audio to wav: %v", err)
 			}
-			// if err = sendAudio(c, audioData); err != nil {
-			// 	if strings.Contains(err.Error(), "broken pipe") {
-			// 		log.Println("Received hangup from asterisk")
-			// 	} else {
-			// 		log.Println("failed to send audio to Asterisk:", err)
-			// 	}
-			// 	return
-			// } else {
 			log.Println("completed audio save in", time.Since(start).Round(time.Second).String())
-			// }
+			transcription, err := openai.TranscribeAudio(openaiClient, inputAudioFile)
+			if err != nil {
+				log.Fatalf("failed to transcribe audio: %v", err)
+			}
+			//language, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
+			if err != nil {
+				log.Fatalf("failed to detect language: %v", err)
+			}
+			translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], transcription))
+			if err != nil {
+				log.Fatalf("failed to translate transciption: %v", err)
+			}
+			deleteFile(inputAudioFile)
+			respBody := rasa.SendMessage("webhooks/rest/webhook", id.String(), translation)
+			responses := rasa.HandleResponseBody(respBody)
+			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
+			for _, response := range responses {
+				picoTtsCmd := fmt.Sprintf("pico2wave -l en-US -w %s \"%s\"", responseAudioFile, response.Text)
+				err := common.ExecuteCommand(picoTtsCmd)
+				if err != nil {
+					log.Fatalf("failed to generate audio response: %v", err)
+				}
+				audioData, err := readWavFile(responseAudioFile)
+				if err != nil {
+					log.Fatalf("failed to read audio response: %v", err)
+				}
+				sendAudio(c, audioData)
+			}
 		}
 		i++
 	}
@@ -182,6 +208,21 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 			}
 		}
 	}
+}
+
+func readWavFile(filePath string) ([]byte, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 // sendAudio sends audio data to the Asterisk server
