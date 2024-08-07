@@ -27,11 +27,7 @@ services:
   gobot_voip:
     build:
       context: .
-      args:
-        - SQL_DB_FILE_NAME=${SQL_DB_FILE_NAME}
     platform: linux/amd64
-    #stdin_open: true
-    #tty: true
     networks: 
       - freetalkbot
     command: ["freetalkbot", "init", "-c", "audio"]
@@ -45,11 +41,7 @@ services:
   gobot_whatsapp:
     build:
       context: .
-      args:
-        - SQL_DB_FILE_NAME=${SQL_DB_FILE_NAME}
     platform: linux/amd64
-    #stdin_open: true
-    #tty: true
     networks: 
       - freetalkbot
     command: ["freetalkbot", "init", "-c", "whatsapp"]

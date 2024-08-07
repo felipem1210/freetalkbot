@@ -28,8 +28,6 @@ RUN go build -tags sqlite_omit_load_extension -o /freetalkbot main.go
 # Create a minimal image to run the binary
 FROM alpine:latest
 
-#ARG SQL_DB_FILE_NAME
-
 # Install necessary runtime dependencies
 RUN apk add ca-certificates tzdata sqlite picotts libc6-compat
 
