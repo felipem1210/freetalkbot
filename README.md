@@ -71,7 +71,8 @@ Same variables than audio bot are needed, just change the make command `make run
 After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
 If you can't scan the QR code you can also link the whatsapp account using a pair code. For that you must set the envar `PAIR_PHONE_NUMBER` with 
 your phone number using format show in the `.env.example`. If you don't need the pair code don't set this envar.
-The whatsapp server store session in sqlite, so you will see a `.db` file. If you delete this file you will have to login using a new QR code.
+
+Once you pair your whatsapp account the session will be stored in a sqlite file. This file is created inside the container but mapped through a docker volume, so you can use it when you want to develop locally. If you delete this file you will have to login using a new QR code.
 
 ### Features
 

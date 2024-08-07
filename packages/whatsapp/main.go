@@ -45,6 +45,7 @@ func handleMessageEvent(v *events.Message) {
 	if messageBody != "" {
 		log.Printf("Message from %s\n", jid)
 		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], messageBody))
+		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], messageBody))
 		rasaUri := rasa.ChooseUri(translation)
 		respBody := rasa.SendMessage(rasaUri, jid, translation)
 		if rasaUri == "webhooks/rest/webhook" {
