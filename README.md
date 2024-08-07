@@ -62,6 +62,12 @@ CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
 
 2. Set the envars with `export $(cat ./.env | xargs)`
 
+3. Change the audiosocket server host in `asterisk/container-config/extensions_local.conf`
+
+```sh
+ same = n,AudioSocket(40325ec2-5efd-4bd3-805f-53576e581d13,host.docker.internal:8080)
+```
+
 3. Run `make run-local-audio`
 
 
@@ -84,5 +90,5 @@ The assistant on this repository is a `reminderbot` that will send you reminders
 
 The following projects inspired to the construction of this one:
 
-* [audiosocket] https://github.com/CyCoreSystems/audiosocket
-* [whatsmeow-quickstart] https://github.com/codespearhead/whatsmeow-quickstart
+* [audiosocket](https://github.com/CyCoreSystems/audiosocket)
+* [whatsmeow-quickstart](https://github.com/codespearhead/whatsmeow-quickstart)
