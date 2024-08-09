@@ -13,9 +13,9 @@ const (
 
 var (
 	ChatgptQueries = map[string]string{
-		"translation_english": "Hello, translate this %s to english, if it is already in english, do nothing",
-		"language":            "Hello, please identify the language of this text: %s. Give me only the language name",
-		"translation":         "Hello, translate this %s to this language %s.",
+		"translation_english": "Hello, translate this text \"%s\" to english, if it is already in english, give me the same text",
+		"language":            "Hello, please identify the language of this text: \"%s\". Give me only the language name",
+		"translation":         "Hello, translate this text \"%s\" to this language \"%s\", if it is already in english, give me the same text",
 	}
 )
 

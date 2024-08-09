@@ -49,7 +49,13 @@ Checkout the following resources to get more knowledge about RASA.
 
 If you modify any of the rasa files you will need to retrain the assistant, you can do it with `make rasa-train`
 
-## Audio bot
+**Disclaimer :** this bot still doesn't work properly. I am still in the learning path of rasa and NLU. 
+
+## Communication Channels
+
+You can communicate with your bot via two channels.
+
+### Audio channel
 
 The docker-compose file alreay has it included, but if you want to develop on it locally:
 
@@ -71,7 +77,7 @@ CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
 3. Run `make run-local-audio`
 
 
-## Whatsapp bot
+## Whatsapp channel
 
 Same variables than audio bot are needed, just change the make command `make run-local-whatsapp`
 

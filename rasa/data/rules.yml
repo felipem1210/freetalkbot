@@ -16,8 +16,6 @@ rules:
   steps:
   - intent: ask_remind
   - action: action_set_reminder
-    # entities:
-    #   - REMINDER
 - rule: forget reminder
   steps:
   - intent: ask_forget_reminders

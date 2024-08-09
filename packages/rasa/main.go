@@ -19,7 +19,7 @@ type Response struct {
 }
 
 func ChooseUri(text string) string {
-	re := regexp.MustCompile(`Remember|remember|remember.*|remind.*|remind`)
+	re := regexp.MustCompile(`(?i)\b(remind|remember)\b`)
 	if re.MatchString(text) {
 		return "webhooks/callback/webhook"
 	} else {

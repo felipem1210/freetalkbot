@@ -55,6 +55,7 @@ nlu:
 
   - intent: ask_remind
     examples: |
+      - Remember that you
       - remind me
       - remind me to
       - remind me that
