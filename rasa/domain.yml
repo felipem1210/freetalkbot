@@ -30,7 +30,7 @@ responses:
   - text: I am a reminder assistant. I can help you set reminders and forget them.
   - text: My purpose is to help you set reminders and forget them.
   utter_explanation:
-  - text: "You will receive your reminders about anything you need to remember on time. You need to say something like 'Hey assistant, remind me half an hour before that I have a doctor appointment the 8th of May at 15:00' You can also say \"Hey assistant, remind me in 30 minutes that I have to call John\""
+  - text: "You will receive your reminders about anything you need to remember on time. You need to say something like: Hey assistant, remind me half an hour before that I have a doctor appointment the 8th of May at 15:00. You can also say: Hey assistant, remind me in 30 minutes that I have to call John"
   utter_goodbye:
   - text: Bye
 actions:
