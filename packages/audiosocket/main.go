@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/zaf/resample"
 )
@@ -41,7 +43,10 @@ const (
 
 var (
 	audioData []byte
+	id        uuid.UUID
 	err       error
+	ctx       context.Context
+	cancel    context.CancelFunc
 )
 
 var openaiClient openai.Client
@@ -53,42 +58,43 @@ func init() {
 var ErrHangup = errors.New("Hangup")
 
 func InitializeServer() {
-	ctx := context.Background()
+	ctx = context.Background()
 	openaiClient = openai.CreateNewClient()
-	log.Println("listening for AudioSocket connections on", listenAddr)
+	slog.Info(fmt.Sprintf("listening for AudioSocket connections on %s", listenAddr))
 	if err = listen(ctx); err != nil {
 		log.Fatalln("listen failure:", err)
 	}
-	log.Println("exiting")
+	slog.Info("exiting")
 }
 
 // Listen listens for and responds to AudioSocket connections
 func listen(ctx context.Context) error {
 	l, err := net.Listen("tcp", listenAddr)
 	if err != nil {
+
 		return errors.Wrapf(err, "failed to bind listener to socket %s", listenAddr)
 	}
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Println("failed to accept new connection:", err)
+			slog.Error("failed to accept new connection:", "error", err)
 			continue
 		}
-
 		go Handle(ctx, conn)
 	}
 }
 
 // Handle processes a call
 func Handle(pCtx context.Context, c net.Conn) {
-	ctx, cancel := context.WithTimeout(pCtx, MaxCallDuration)
+	ctx, cancel = context.WithTimeout(pCtx, MaxCallDuration)
 	defer cancel()
-	id, err := audiosocket.GetID(c)
+	id, err = audiosocket.GetID(c)
 	if err != nil {
-		log.Println("failed to get call ID:", err)
+		slog.Error("failed to get call ID:", "error", err)
+		return
 	}
-	log.Printf("processing call %s", id.String())
+	slog.Info("Begin call process", "callId", id.String())
 
 	// Channel to signal end of user speaking
 	hangupCh := make(chan bool)
@@ -105,58 +111,70 @@ func Handle(pCtx context.Context, c net.Conn) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Call context done")
+			slog.Info("Call context done", "callId", id.String())
 			sendHangupSignal(c)
 			return
 		case <-callTimer.C:
-			log.Println("Max call duration reached, sending hangup signal")
+			slog.Info("Max call duration reached, sending hangup signal", "callId", id.String())
 			sendHangupSignal(c)
 			cancel()
 			return
 		default:
 			// Start listening for user speech
-			log.Println("receiving audio")
+			slog.Debug("receiving audio", "callId", id.String())
 			go processFromAsterisk(cancel, c, hangupCh, audioDataCh)
 
 			// Wait for user to stop speaking
 			<-hangupCh
 			audioData = <-audioDataCh
-			log.Println("user stopped speaking")
-			log.Println("sending audio")
-			start := time.Now()
+			slog.Debug("user stopped speaking", "callId", id.String())
+			slog.Debug("sending audio to audiosocket channel", "callId", id.String())
 			inputAudioFile := fmt.Sprintf("%s/output-%s.wav", common.AudioDir, strconv.Itoa(i))
 			err := saveToWAV(audioData, inputAudioFile)
 			if err != nil {
-				log.Fatalf("failed to save audio to wav: %v", err)
+				return
 			}
-			log.Println("completed audio save in", time.Since(start).Round(time.Second).String())
+			slog.Debug("generated audio wav file", "callId", id.String())
 			transcription, err := openai.TranscribeAudio(openaiClient, inputAudioFile)
 			if err != nil {
-				log.Fatalf("failed to transcribe audio: %v", err)
+				slog.Error(fmt.Sprintf("failed to transcribe audio: %v", err), "callId", id.String())
+				return
 			}
 			language, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
 			if err != nil {
-				log.Fatalf("failed to detect language: %v", err)
+				slog.Error(fmt.Sprintf("failed to detect language: %v", err), "callId", id.String())
+				return
 			}
 			translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], transcription))
 			if err != nil {
-				log.Fatalf("failed to translate transciption: %v", err)
+				slog.Error(fmt.Sprintf("failed to translate transciption: %v", err), "callId", id.String())
+				return
 			}
 			go deleteFile(inputAudioFile)
-			respBody := rasa.SendMessage("webhooks/rest/webhook", id.String(), translation)
-			responses := rasa.HandleResponseBody(respBody)
+			respBody, err := rasa.SendMessage("webhooks/rest/webhook", id.String(), translation)
+			if err != nil {
+				slog.Error(fmt.Sprintf("failed to send message to rasa: %v", err), "callId", id.String())
+				return
+			}
+			responses, err := rasa.HandleResponseBody(respBody)
+			if err != nil {
+				slog.Error(fmt.Sprintf("failed to handle response body: %v", err), "callId", id.String())
+				return
+			}
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			picoTtsLanguage := choosePicoTtsLanguage(language)
 			for _, response := range responses {
 				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
 				picoTtsCmd := fmt.Sprintf("pico2wave -l %s -w %s \"%s\"", picoTtsLanguage, responseAudioFile, responseTranslated)
+				slog.Debug(fmt.Sprintf("command to generate audio: %s", picoTtsCmd), "callId", id.String())
 				err := common.ExecuteCommand(picoTtsCmd)
 				if err != nil {
-					log.Fatalf("failed to generate audio response: %v", err)
+					slog.Error(fmt.Sprintf("failed to generate audio from response: %v", err), "callId", id.String())
+					return
 				}
 				audioData, err := handleWavFile(responseAudioFile)
 				if err != nil {
-					log.Fatalf("failed to read audio response: %v", err)
+					return
 				}
 				go deleteFile(responseAudioFile)
 				sendAudio(c, audioData)
@@ -194,20 +212,20 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 		m, err := audiosocket.NextMessage(c)
 
 		if errors.Cause(err) == io.EOF {
-			log.Println("Received hangup from asterisk")
+			slog.Info("Received hangup from asterisk", "callId", id.String())
 			cancel()
 			return
 		} else if err != nil {
-			log.Println("error reading message:", err)
+			slog.Error(fmt.Sprintf("error reading message:", err), "callId", id.String())
 			return
 		}
 		switch m.Kind() {
 		case audiosocket.KindHangup:
-			log.Println("audiosocket received hangup command")
+			slog.Debug("audiosocket received hangup command", "callId", id.String())
 			hangupCh <- true
 			return
 		case audiosocket.KindError:
-			log.Println("error from audiosocket")
+			slog.Warn("Packet loss when sending to audiosocket", "callId", id.String())
 		case audiosocket.KindSlin:
 			// Store audio data to send it later in audioDataCh
 			messageData = append(messageData, m.Payload()...)
@@ -223,7 +241,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 					silenceStart = time.Now()
 					detectingSilence = true
 				} else if time.Since(silenceStart) >= silenceDuration {
-					log.Println("Detected silence")
+					slog.Debug("Detected silence", "callId", id.String())
 					hangupCh <- true
 					audioDataCh <- messageData
 					return
@@ -239,7 +257,8 @@ func handleWavFile(filePath string) ([]byte, error) {
 	// Open the input WAV file
 	file, err := os.Open(filePath)
 	if err != nil {
-		log.Fatalf("failed to open input file: %v", err)
+		slog.ErrorContext(ctx, "failed to open input file", slog.Any("error", err), "callId", id.String())
+		return nil, err
 	}
 	defer file.Close()
 
@@ -247,17 +266,20 @@ func handleWavFile(filePath string) ([]byte, error) {
 	header := make([]byte, 44)
 	_, err = file.Read(header)
 	if err != nil {
-		log.Fatalf("failed to read WAV header: %v", err)
+		slog.ErrorContext(ctx, "failed to read WAV header", slog.Any("error", err), "callId", id.String())
+		return nil, err
 	}
 	wavSampleRate := binary.LittleEndian.Uint32(header[24:28])
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		log.Fatalf("failed to read file data: %v", err)
+		slog.ErrorContext(ctx, "failed to read file data", slog.Any("error", err), "callId", id.String())
+		return nil, err
 	}
 	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
-		log.Fatalf("failed to seek file: %v", err)
+		slog.ErrorContext(ctx, "failed to seek file", slog.Any("error", err), "callId", id.String())
+		return nil, err
 	}
 
 	// Create a new resampler to convert the WAV file to PCM 16bit lineat 8kHz Mono
@@ -265,15 +287,18 @@ func handleWavFile(filePath string) ([]byte, error) {
 
 	resampler, err := resample.New(&out, float64(wavSampleRate), 8000, 1, 3, 6)
 	if err != nil {
-		log.Fatalf("failed to create resampler: %v", err)
+		slog.ErrorContext(ctx, "failed to create resampler", slog.Any("error", err), "callId", id.String())
+		return nil, err
 	}
 	_, err = resampler.Write(data[44:])
 	if err != nil {
-		return nil, fmt.Errorf("Write failed: %s", err)
+		slog.ErrorContext(ctx, "resampling write failed", slog.Any("error", err), "callId", id.String())
+		return nil, err
 	}
 	err = resampler.Close()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to close Resampler:", err)
+		slog.ErrorContext(ctx, "failed to close resampler", slog.Any("error", err), "callId", id.String())
+		return nil, err
 	}
 
 	return out.Bytes(), nil
@@ -294,12 +319,12 @@ func sendAudio(w io.Writer, data []byte) error {
 			chunkLen = len(data) - i
 		}
 		if _, err := w.Write(audiosocket.SlinMessage(data[i : i+chunkLen])); err != nil {
-			return errors.Wrap(err, "failed to write chunk to audiosocket")
+			slog.Debug("failed to write chunk to audiosocket", "callId", id.String())
 		}
 		chunks++
 		i += chunkLen
 	}
-	return errors.New("ticker unexpectedly stopped")
+	return nil
 }
 
 // saveToWAV saved data into a wav file.
@@ -307,6 +332,7 @@ func saveToWAV(audioData []byte, filename string) error {
 	// Create output file
 	outFile, err := os.Create(filename)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to open output wav file", slog.Any("error", err), "callId", id.String())
 		return err
 	}
 	defer outFile.Close()
@@ -329,11 +355,13 @@ func saveToWAV(audioData []byte, filename string) error {
 
 	// Write the PCM audio data to the WAV encoder
 	if err := enc.Write(buf); err != nil {
+		slog.ErrorContext(ctx, "failed to write audio data to wav encoder", slog.Any("error", err), "callId", id.String())
 		return err
 	}
 
 	// Close the encoder to ensure all data is written
 	if err := enc.Close(); err != nil {
+		slog.ErrorContext(ctx, "failed to close wav encoder", slog.Any("error", err), "callId", id.String())
 		return err
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,9 +26,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var whatsappClient *whatsmeow.Client
-var openaiClient openai.Client
-var language string
+var (
+	whatsappClient *whatsmeow.Client
+	openaiClient   openai.Client
+	language       string
+	jid            string
+)
 
 func GetEventHandler() func(interface{}) {
 	return func(evt interface{}) {
@@ -40,26 +44,44 @@ func GetEventHandler() func(interface{}) {
 
 func handleMessageEvent(v *events.Message) {
 	messageBody := v.Message.GetConversation()
-	jid := v.Info.Sender.String()
+	jid = v.Info.Sender.String()
 
 	if messageBody != "" {
-		log.Printf("Message from %s\n", jid)
+		slog.Info("Received message", "jid", jid)
 		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], messageBody))
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], messageBody))
 		rasaUri := rasa.ChooseUri(translation)
-		respBody := rasa.SendMessage(rasaUri, jid, translation)
+		respBody, err := rasa.SendMessage(rasaUri, jid, translation)
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error sending message: %s", err), "jid", jid)
+			return
+		}
 		if rasaUri == "webhooks/rest/webhook" {
-			responses := rasa.HandleResponseBody(respBody)
+			responses, err := rasa.HandleResponseBody(respBody)
+			if err != nil {
+				slog.Error(fmt.Sprintf("Error handling response body: %s", err), "jid", jid)
+				return
+			}
 			for _, response := range responses {
 				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
 				response.Text = responseTranslated
-				_ = sendWhatsappResponse(jid, &response)
+				result, error := sendWhatsappResponse(jid, &response)
+				if error != nil {
+					slog.Error(fmt.Sprintf("Error sending response: %s", error), "jid", jid)
+					return
+				} else {
+					slog.Info(result, "jid", jid)
+				}
 			}
 		}
 	}
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
 		transcription, translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error handling audio message: %s", err), "jid", jid)
+			return
+		}
 		rasaUri := rasa.ChooseUri(translation)
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
 		if err != nil {
@@ -67,22 +89,26 @@ func handleMessageEvent(v *events.Message) {
 			return
 		}
 
-		_ = rasa.SendMessage(rasaUri, jid, translation)
+		_, err = rasa.SendMessage(rasaUri, jid, translation)
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error sending message to rasa: %s", err), "jid", jid)
+			return
+		}
 	}
 }
 
-func sendWhatsappResponse(to string, response *rasa.Response) string {
+func sendWhatsappResponse(to string, response *rasa.Response) (string, error) {
 	jid, err := types.ParseJID(to)
 	if err != nil {
-		log.Fatalf("Invalid JID: %v", to)
+		return "", fmt.Errorf("invalid JID: %v", to)
 	}
 	_, err = whatsappClient.SendMessage(context.Background(), jid, &waE2E.Message{
 		Conversation: proto.String(response.Text),
 	})
 	if err != nil {
-		log.Fatalf("Failed to send message: %v", err)
+		return "", fmt.Errorf("failed to send message: %v", err)
 	}
-	return fmt.Sprintf("Message sent to %s", to)
+	return fmt.Sprintf("Message sent to %s", to), nil
 }
 
 func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, string, error) {
@@ -141,12 +167,14 @@ func InitializeServer() {
 
 	container, err := sqlstore.New("sqlite3", "file:"+sqlDbFileName+"?_foreign_keys=on", dbLog)
 	if err != nil {
-		log.Fatalf("Failed to initialize SQL store: %v", err)
+		slog.Error(fmt.Sprintf("Failed to initialize SQL store: %v", err))
+		os.Exit(1)
 	}
 
 	deviceStore, err := container.GetFirstDevice()
 	if err != nil {
-		log.Fatalf("Failed to get device: %v", err)
+		slog.Error(fmt.Sprintf("Failed to get device: %v", err))
+		os.Exit(1)
 	}
 
 	openaiClient = openai.CreateNewClient()
@@ -161,27 +189,30 @@ func handleClientConnection(client *whatsmeow.Client) {
 	if client.Store.ID == nil {
 		qrChan, _ := client.GetQRChannel(context.Background())
 		if err := client.Connect(); err != nil {
-			log.Fatalf("Failed to connect: %v", err)
+			slog.Error(fmt.Sprintf("Failed to connect: %v", err))
+			os.Exit(1)
 		}
 		pairPhoneNumber, varExists := os.LookupEnv("PAIR_PHONE_NUMBER")
 		if varExists {
 			if code, err := client.PairPhone(pairPhoneNumber, true, whatsmeow.PairClientChrome, "Chrome (MacOS)"); err != nil {
-				log.Fatalf("Failed to pair phone: %v", err)
+				slog.Error(fmt.Sprintf("Failed to pair phone: %v", err))
+				os.Exit(1)
 			} else {
-				fmt.Println("Pairing code:", code)
+				slog.Info(fmt.Sprintf("Pairing code: %s", code))
 			}
 		}
 		for evt := range qrChan {
 			if evt.Event == "code" {
 				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-				fmt.Println("QR code:", evt.Code)
+				slog.Info(fmt.Sprintf("QR code: %s", evt.Code))
 			} else {
-				fmt.Println("Login event:", evt.Event)
+				slog.Info(fmt.Sprintf("Login event: %s", evt.Event))
 			}
 		}
 	} else {
 		if err := client.Connect(); err != nil {
-			log.Fatalf("Failed to connect: %v", err)
+			slog.Error(fmt.Sprintf("Failed to connect: %v", err))
+			os.Exit(1)
 		}
 	}
 	waitForShutdown(client)

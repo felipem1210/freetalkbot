@@ -2,7 +2,7 @@ package whatsapp
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/felipem1210/freetalkbot/packages/common"
@@ -16,7 +16,7 @@ func InitializeCallbackServer() {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.POST("/bot", handleBotEndpoint)
-	log.Println("Starting callback server on port 5034")
+	slog.Info("Starting callback server on port 5034")
 	router.Run(":5034")
 }
 
@@ -33,11 +33,18 @@ func handleBotEndpoint(c *gin.Context) {
 		RecipientId: recipientID,
 		Text:        text,
 	})
-	//sendGetRequest(language)
 	for _, response := range callbackResponses {
-		responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+		responseTranslated, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error translating response: %s", err))
+		}
 		response.Text = responseTranslated
-		sendWhatsappResponse(recipientID, &response)
+		result, err := sendWhatsappResponse(recipientID, &response)
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error sending response: %s", err), "jid", jid)
+		} else {
+			slog.Info(result, "jid", jid)
+		}
 	}
 	c.JSON(http.StatusOK, callbackResponses)
 }

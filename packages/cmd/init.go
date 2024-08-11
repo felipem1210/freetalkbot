@@ -5,6 +5,7 @@ import (
 	"os"
 
 	audiosocketserver "github.com/felipem1210/freetalkbot/packages/audiosocket"
+	"github.com/felipem1210/freetalkbot/packages/common"
 	"github.com/felipem1210/freetalkbot/packages/whatsapp"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,7 @@ var prCmd = &cobra.Command{
 	Long:  `Initialize the bot.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		comChan, _ := cmd.Flags().GetString("communication-channel")
+		common.SetLogger(os.Getenv("LOG_LEVEL"))
 		if comChan == "audio" {
 			audiosocketserver.InitializeServer()
 		} else if comChan == "whatsapp" {

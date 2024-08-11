@@ -2,7 +2,8 @@ package audiosocketserver
 
 import (
 	"encoding/binary"
-	"log"
+	"fmt"
+	"log/slog"
 	"math"
 	"net"
 	"os"
@@ -15,7 +16,7 @@ import (
 func calculateVolumePCM16(buffer []byte) float64 {
 	// Check if the buffer length is a multiple of 2
 	if len(buffer)%2 != 0 {
-		log.Println("Buffer length is not a multiple of 2")
+		slog.Error("Buffer length is not a multiple of 2", "callId", id.String())
 		return 0
 	}
 
@@ -66,7 +67,7 @@ func calculateVolumeG711(buffer []byte) float64 {
 // delete a file
 func deleteFile(filename string) {
 	if err := os.Remove(filename); err != nil {
-		log.Println("Failed to delete file:", err)
+		slog.Error(fmt.Sprintf("Failed to delete file:", err), "callId", id.String())
 	}
 }
 
@@ -74,8 +75,8 @@ func deleteFile(filename string) {
 func sendHangupSignal(c net.Conn) {
 	hangupMessage := audiosocket.HangupMessage()
 	if _, err := c.Write(hangupMessage); err != nil {
-		log.Println("Failed to send hangup signal:", err)
+		slog.Error(fmt.Sprintf("Failed to send hangup signal:", err), "callId", id.String())
 	} else {
-		log.Println("Hangup signal sent successfully")
+		slog.Info("Hangup signal sent successfully", "callId", id.String())
 	}
 }
