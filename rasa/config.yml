@@ -1,6 +1,6 @@
 recipe: default.v1
 assistant_id: reminder_bot
-language: en
+language: "${ASSISTANT_LANGUAGE}"
 pipeline:
 - name: "WhitespaceTokenizer"
 - name: "RegexFeaturizer"
