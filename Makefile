@@ -1,5 +1,11 @@
 SHELL := /bin/zsh
 
+build:
+	docker-compose build
+
+run:
+	docker-compose up -d
+
 run-local-audio:
 	docker-compose down
 	docker-compose up -d

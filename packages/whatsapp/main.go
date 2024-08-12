@@ -27,10 +27,11 @@ import (
 )
 
 var (
-	whatsappClient *whatsmeow.Client
-	openaiClient   openai.Client
-	language       string
-	jid            string
+	whatsappClient    *whatsmeow.Client
+	openaiClient      openai.Client
+	language          string
+	assistantLanguage string
+	jid               string
 )
 
 func GetEventHandler() func(interface{}) {
@@ -45,13 +46,16 @@ func GetEventHandler() func(interface{}) {
 func handleMessageEvent(v *events.Message) {
 	messageBody := v.Message.GetConversation()
 	jid = v.Info.Sender.String()
-
+	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
 	if messageBody != "" {
+		//var translation string
 		slog.Info("Received message", "jid", jid)
-		translation, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], messageBody))
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], messageBody))
-		rasaUri := rasa.ChooseUri(translation)
-		respBody, err := rasa.SendMessage(rasaUri, jid, translation)
+		if language != assistantLanguage {
+			messageBody, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], messageBody, assistantLanguage))
+		}
+		rasaUri := rasa.ChooseUri(messageBody)
+		respBody, err := rasa.SendMessage(rasaUri, jid, messageBody)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error sending message: %s", err), "jid", jid)
 			return
@@ -63,8 +67,10 @@ func handleMessageEvent(v *events.Message) {
 				return
 			}
 			for _, response := range responses {
-				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
-				response.Text = responseTranslated
+				if language != assistantLanguage {
+					responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+					response.Text = responseTranslated
+				}
 				result, error := sendWhatsappResponse(jid, &response)
 				if error != nil {
 					slog.Error(fmt.Sprintf("Error sending response: %s", error), "jid", jid)
@@ -77,19 +83,28 @@ func handleMessageEvent(v *events.Message) {
 	}
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
-		transcription, translation, err := handleAudioMessage(audioMessage, v.Info.ID)
+		transcription, err := transcribeAudio(audioMessage, v.Info.ID)
 		if err != nil {
-			slog.Error(fmt.Sprintf("Error handling audio message: %s", err), "jid", jid)
+			slog.Error(fmt.Sprintf("Error transcribing audio message: %s", err), "jid", jid)
 			return
 		}
-		rasaUri := rasa.ChooseUri(translation)
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
+		if language != assistantLanguage {
+			transcription, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], transcription, assistantLanguage))
+			if err != nil {
+				slog.Error(fmt.Sprintf("Error handling audio message: %s", err), "jid", jid)
+				return
+			}
+		}
+		rasaUri := rasa.ChooseUri(transcription)
+		slog.Debug(fmt.Sprintf("rasa uri: %s", rasaUri), "jid", jid)
+		slog.Debug(fmt.Sprintf("transcription: %s", transcription), "jid", jid)
 		if err != nil {
 			log.Printf("Error handling audio message: %s", err)
 			return
 		}
 
-		_, err = rasa.SendMessage(rasaUri, jid, translation)
+		_, err = rasa.SendMessage(rasaUri, jid, transcription)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error sending message to rasa: %s", err), "jid", jid)
 			return
@@ -111,24 +126,20 @@ func sendWhatsappResponse(to string, response *rasa.Response) (string, error) {
 	return fmt.Sprintf("Message sent to %s", to), nil
 }
 
-func handleAudioMessage(audioMessage *waE2E.AudioMessage, messageId string) (string, string, error) {
+func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string, error) {
 	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
 	if err := downloadAudio(audioMessage.GetURL(), common.AudioEncPath); err != nil {
-		return "", "", err
+		return "", err
 	}
 	audioFilePath := fmt.Sprintf("%s%s.ogg", common.AudioDir, messageId)
 	if err := decryptAudioFile(common.AudioEncPath, audioFilePath, mediaKeyHex); err != nil {
-		return "", "", err
+		return "", err
 	}
 	transcription, err := openai.TranscribeAudio(openaiClient, audioFilePath)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], transcription))
-	if err != nil {
-		return "", "", err
-	}
-	return transcription, translation, nil
+	return transcription, nil
 }
 
 func decryptAudioFile(inputFilePath, outputFilePath, mediaKey string) error {

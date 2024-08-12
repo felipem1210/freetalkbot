@@ -42,11 +42,13 @@ const (
 )
 
 var (
-	audioData []byte
-	id        uuid.UUID
-	err       error
-	ctx       context.Context
-	cancel    context.CancelFunc
+	audioData         []byte
+	id                uuid.UUID
+	err               error
+	ctx               context.Context
+	cancel            context.CancelFunc
+	assistantLanguage string
+	language          string
 )
 
 var openaiClient openai.Client
@@ -87,6 +89,7 @@ func listen(ctx context.Context) error {
 
 // Handle processes a call
 func Handle(pCtx context.Context, c net.Conn) {
+	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
 	ctx, cancel = context.WithTimeout(pCtx, MaxCallDuration)
 	defer cancel()
 	id, err = audiosocket.GetID(c)
@@ -140,18 +143,21 @@ func Handle(pCtx context.Context, c net.Conn) {
 				slog.Error(fmt.Sprintf("failed to transcribe audio: %v", err), "callId", id.String())
 				return
 			}
-			language, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
+
+			language, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to detect language: %v", err), "callId", id.String())
 				return
 			}
-			translation, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation_english"], transcription))
-			if err != nil {
-				slog.Error(fmt.Sprintf("failed to translate transciption: %v", err), "callId", id.String())
-				return
+			if assistantLanguage != language {
+				transcription, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], transcription, language))
+				if err != nil {
+					slog.Error(fmt.Sprintf("failed to translate transcription: %v", err), "callId", id.String())
+					return
+				}
 			}
 			go deleteFile(inputAudioFile)
-			respBody, err := rasa.SendMessage("webhooks/rest/webhook", id.String(), translation)
+			respBody, err := rasa.SendMessage("webhooks/rest/webhook", id.String(), transcription)
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to send message to rasa: %v", err), "callId", id.String())
 				return
@@ -164,8 +170,14 @@ func Handle(pCtx context.Context, c net.Conn) {
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			picoTtsLanguage := choosePicoTtsLanguage(language)
 			for _, response := range responses {
-				responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
-				picoTtsCmd := fmt.Sprintf("pico2wave -l %s -w %s \"%s\"", picoTtsLanguage, responseAudioFile, responseTranslated)
+				if language != assistantLanguage {
+					response.Text, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+					if err != nil {
+						slog.Error(fmt.Sprintf("failed to translate response: %v", err), "callId", id.String())
+						return
+					}
+				}
+				picoTtsCmd := fmt.Sprintf("pico2wave -l %s -w %s \"%s\"", picoTtsLanguage, responseAudioFile, response.Text)
 				slog.Debug(fmt.Sprintf("command to generate audio: %s", picoTtsCmd), "callId", id.String())
 				err := common.ExecuteCommand(picoTtsCmd)
 				if err != nil {
@@ -186,17 +198,17 @@ func Handle(pCtx context.Context, c net.Conn) {
 
 func choosePicoTtsLanguage(language string) string {
 	switch language {
-	case "English":
+	case "en":
 		return "en-US"
-	case "Spanish":
+	case "es":
 		return "es-ES"
-	case "French":
+	case "fr":
 		return "fr-FR"
-	case "German":
+	case "de":
 		return "de-DE"
-	case "Italian":
+	case "it":
 		return "it-IT"
-	case "Portuguese":
+	case "pt":
 		return "pt-PT"
 	default:
 		return "en-US"

@@ -33,12 +33,14 @@ func handleBotEndpoint(c *gin.Context) {
 		RecipientId: recipientID,
 		Text:        text,
 	})
+	var err error
 	for _, response := range callbackResponses {
-		responseTranslated, err := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error translating response: %s", err))
+		if language != assistantLanguage {
+			response.Text, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+			if err != nil {
+				slog.Error(fmt.Sprintf("Error translating response: %s", err))
+			}
 		}
-		response.Text = responseTranslated
 		result, err := sendWhatsappResponse(recipientID, &response)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error sending response: %s", err), "jid", jid)
