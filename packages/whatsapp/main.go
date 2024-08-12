@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/felipem1210/freetalkbot/packages/common"
@@ -51,7 +52,7 @@ func handleMessageEvent(v *events.Message) {
 		//var translation string
 		slog.Info("Received message", "jid", jid)
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], messageBody))
-		if language != assistantLanguage {
+		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 			messageBody, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], messageBody, assistantLanguage))
 		}
 		rasaUri := rasa.ChooseUri(messageBody)
@@ -67,7 +68,7 @@ func handleMessageEvent(v *events.Message) {
 				return
 			}
 			for _, response := range responses {
-				if language != assistantLanguage {
+				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 					responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
 					response.Text = responseTranslated
 				}
@@ -89,7 +90,7 @@ func handleMessageEvent(v *events.Message) {
 			return
 		}
 		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
-		if language != assistantLanguage {
+		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 			transcription, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], transcription, assistantLanguage))
 			if err != nil {
 				slog.Error(fmt.Sprintf("Error handling audio message: %s", err), "jid", jid)

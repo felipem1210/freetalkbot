@@ -15,8 +15,8 @@ const (
 
 var (
 	ChatgptQueries = map[string]string{
-		"language":    "Hello, please identify the language of this text: \"%s\". Give me only the language code",
-		"translation": "Hello, translate this text \"%s\" to this language \"%s\"",
+		"language":    "Identify the language of this text: %s. Give me in your response only the language code in lowercase letters, even if is in english give me only the language code",
+		"translation": "Translate this text: %s to this language %s",
 	}
 )
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/felipem1210/freetalkbot/packages/common"
 	openai "github.com/felipem1210/freetalkbot/packages/openai"
@@ -35,7 +36,7 @@ func handleBotEndpoint(c *gin.Context) {
 	})
 	var err error
 	for _, response := range callbackResponses {
-		if language != assistantLanguage {
+		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 			response.Text, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
 			if err != nil {
 				slog.Error(fmt.Sprintf("Error translating response: %s", err))

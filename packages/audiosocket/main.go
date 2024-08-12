@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/CyCoreSystems/audiosocket"
@@ -73,7 +74,6 @@ func InitializeServer() {
 func listen(ctx context.Context) error {
 	l, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-
 		return errors.Wrapf(err, "failed to bind listener to socket %s", listenAddr)
 	}
 
@@ -131,64 +131,93 @@ func Handle(pCtx context.Context, c net.Conn) {
 			<-hangupCh
 			audioData = <-audioDataCh
 			slog.Debug("user stopped speaking", "callId", id.String())
+			start := time.Now()
 			slog.Debug("sending audio to audiosocket channel", "callId", id.String())
 			inputAudioFile := fmt.Sprintf("%s/output-%s.wav", common.AudioDir, strconv.Itoa(i))
 			err := saveToWAV(audioData, inputAudioFile)
 			if err != nil {
 				return
+			} else {
+				slog.Debug("generated audio wav file", "callId", id.String())
 			}
-			slog.Debug("generated audio wav file", "callId", id.String())
+
 			transcription, err := openai.TranscribeAudio(openaiClient, inputAudioFile)
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to transcribe audio: %v", err), "callId", id.String())
 				return
+			} else {
+				slog.Debug(fmt.Sprintf("transcription generated: %s", transcription), "callId", id.String())
 			}
-
-			language, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
+			queryToChatgpt := fmt.Sprintf(common.ChatgptQueries["language"], transcription)
+			slog.Debug(fmt.Sprintf("query to detect language: %s", queryToChatgpt), "callId", id.String())
+			language, err = openai.ConsultChatGpt(openaiClient, queryToChatgpt)
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to detect language: %v", err), "callId", id.String())
 				return
+			} else {
+				slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
 			}
-			if assistantLanguage != language {
-				transcription, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], transcription, language))
+
+			if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
+				queryToChatgpt := fmt.Sprintf(common.ChatgptQueries["translation"], transcription, assistantLanguage)
+				slog.Debug(fmt.Sprintf("query to translate: %s", queryToChatgpt), "callId", id.String())
+				transcription, err = openai.ConsultChatGpt(openaiClient, queryToChatgpt)
 				if err != nil {
 					slog.Error(fmt.Sprintf("failed to translate transcription: %v", err), "callId", id.String())
 					return
+				} else {
+					slog.Debug(fmt.Sprintf("translated transcription: %s", transcription), "callId", id.String())
 				}
 			}
 			go deleteFile(inputAudioFile)
+
 			respBody, err := rasa.SendMessage("webhooks/rest/webhook", id.String(), transcription)
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to send message to rasa: %v", err), "callId", id.String())
 				return
+			} else {
+				slog.Debug("message sent to rasa", "callId", id.String())
 			}
+
 			responses, err := rasa.HandleResponseBody(respBody)
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to handle response body: %v", err), "callId", id.String())
 				return
+			} else {
+				slog.Debug(fmt.Sprintf("response received: %s", responses), "callId", id.String())
 			}
+
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			picoTtsLanguage := choosePicoTtsLanguage(language)
 			for _, response := range responses {
-				if language != assistantLanguage {
+				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 					response.Text, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
 					if err != nil {
 						slog.Error(fmt.Sprintf("failed to translate response: %v", err), "callId", id.String())
 						return
+					} else {
+						slog.Debug(fmt.Sprintf("translated response: %s", response.Text), "callId", id.String())
 					}
 				}
+
 				picoTtsCmd := fmt.Sprintf("pico2wave -l %s -w %s \"%s\"", picoTtsLanguage, responseAudioFile, response.Text)
 				slog.Debug(fmt.Sprintf("command to generate audio: %s", picoTtsCmd), "callId", id.String())
 				err := common.ExecuteCommand(picoTtsCmd)
 				if err != nil {
 					slog.Error(fmt.Sprintf("failed to generate audio from response: %v", err), "callId", id.String())
 					return
+				} else {
+					slog.Debug(fmt.Sprintf("audio generated from response: %s", response.Text), "callId", id.String())
 				}
+
 				audioData, err := handleWavFile(responseAudioFile)
 				if err != nil {
 					return
+				} else {
+					slog.Debug(fmt.Sprintf("audio data generated from response: %s", response.Text), "callId", id.String())
 				}
 				go deleteFile(responseAudioFile)
+				slog.Debug(fmt.Sprintf("completed to create the response in %s", time.Since(start).Round(time.Second).String()), "callId", id.String())
 				sendAudio(c, audioData)
 			}
 		}
@@ -331,7 +360,7 @@ func sendAudio(w io.Writer, data []byte) error {
 			chunkLen = len(data) - i
 		}
 		if _, err := w.Write(audiosocket.SlinMessage(data[i : i+chunkLen])); err != nil {
-			slog.Debug("failed to write chunk to audiosocket", "callId", id.String())
+			return errors.Wrap(err, "failed to write chunk to audiosocket")
 		}
 		chunks++
 		i += chunkLen
