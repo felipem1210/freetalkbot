@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/felipem1210/freetalkbot/packages/common"
 	openai "github.com/felipem1210/freetalkbot/packages/openai"
 	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/gin-gonic/gin"
@@ -37,11 +36,15 @@ func handleBotEndpoint(c *gin.Context) {
 	var err error
 	for _, response := range callbackResponses {
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			response.Text, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+			response.Text, err = openai.TranslateText(openaiClient, response.Text, assistantLanguage)
 			if err != nil {
-				slog.Error(fmt.Sprintf("Error translating response: %s", err))
+				slog.Error(fmt.Sprintf("failed to translate response: %v", err), "jid", jid)
+				return
+			} else {
+				slog.Debug(fmt.Sprintf("translated response: %s", response.Text), "jid", jid)
 			}
 		}
+
 		result, err := sendWhatsappResponse(recipientID, &response)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error sending response: %s", err), "jid", jid)

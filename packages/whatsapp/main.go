@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,6 +32,7 @@ var (
 	language          string
 	assistantLanguage string
 	jid               string
+	err               error
 )
 
 func GetEventHandler() func(interface{}) {
@@ -51,10 +51,25 @@ func handleMessageEvent(v *events.Message) {
 	if messageBody != "" {
 		//var translation string
 		slog.Info("Received message", "jid", jid)
-		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], messageBody))
-		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			messageBody, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], messageBody, assistantLanguage))
+
+		language, err = openai.DetectLanguage(openaiClient, messageBody)
+		if err != nil {
+			slog.Error(fmt.Sprintf("failed to detect language: %v", err), "jid", jid)
+			return
+		} else {
+			slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
 		}
+
+		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
+			messageBody, err = openai.TranslateText(openaiClient, messageBody, assistantLanguage)
+			if err != nil {
+				slog.Error(fmt.Sprintf("failed to translate messageBody: %v", err), "jid", jid)
+				return
+			} else {
+				slog.Debug(fmt.Sprintf("translated messageBody: %s", messageBody), "jid", jid)
+			}
+		}
+
 		rasaUri := rasa.ChooseUri(messageBody)
 		respBody, err := rasa.SendMessage(rasaUri, jid, messageBody)
 		if err != nil {
@@ -69,8 +84,13 @@ func handleMessageEvent(v *events.Message) {
 			}
 			for _, response := range responses {
 				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-					responseTranslated, _ := openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
-					response.Text = responseTranslated
+					response.Text, err = openai.TranslateText(openaiClient, response.Text, language)
+					if err != nil {
+						slog.Error(fmt.Sprintf("failed to translate response: %v", err), "jid", jid)
+						return
+					} else {
+						slog.Debug(fmt.Sprintf("translated response: %s", response.Text), "jid", jid)
+					}
 				}
 				result, error := sendWhatsappResponse(jid, &response)
 				if error != nil {
@@ -89,21 +109,27 @@ func handleMessageEvent(v *events.Message) {
 			slog.Error(fmt.Sprintf("Error transcribing audio message: %s", err), "jid", jid)
 			return
 		}
-		language, _ = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["language"], transcription))
+
+		language, err = openai.DetectLanguage(openaiClient, transcription)
+		if err != nil {
+			slog.Error(fmt.Sprintf("failed to detect language: %v", err), "jid", jid)
+			return
+		} else {
+			slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
+		}
+
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			transcription, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], transcription, assistantLanguage))
+			transcription, err = openai.TranslateText(openaiClient, transcription, assistantLanguage)
 			if err != nil {
-				slog.Error(fmt.Sprintf("Error handling audio message: %s", err), "jid", jid)
+				slog.Error(fmt.Sprintf("failed to translate transcription: %v", err), "jid", jid)
 				return
+			} else {
+				slog.Debug(fmt.Sprintf("translated transcription: %s", messageBody), "jid", jid)
 			}
 		}
+
 		rasaUri := rasa.ChooseUri(transcription)
 		slog.Debug(fmt.Sprintf("rasa uri: %s", rasaUri), "jid", jid)
-		slog.Debug(fmt.Sprintf("transcription: %s", transcription), "jid", jid)
-		if err != nil {
-			log.Printf("Error handling audio message: %s", err)
-			return
-		}
 
 		_, err = rasa.SendMessage(rasaUri, jid, transcription)
 		if err != nil {

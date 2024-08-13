@@ -100,11 +100,11 @@ func Handle(pCtx context.Context, c net.Conn) {
 	slog.Info("Begin call process", "callId", id.String())
 
 	// Channel to signal end of user speaking
-	hangupCh := make(chan bool)
+	userEndSpeaking := make(chan bool)
 	// Channel to send audio data
 	audioDataCh := make(chan []byte)
 
-	defer close(hangupCh)
+	defer close(userEndSpeaking)
 	defer close(audioDataCh)
 
 	// Configure the call timer
@@ -125,10 +125,10 @@ func Handle(pCtx context.Context, c net.Conn) {
 		default:
 			// Start listening for user speech
 			slog.Debug("receiving audio", "callId", id.String())
-			go processFromAsterisk(cancel, c, hangupCh, audioDataCh)
+			go processFromAsterisk(cancel, c, userEndSpeaking, audioDataCh)
 
 			// Wait for user to stop speaking
-			<-hangupCh
+			<-userEndSpeaking
 			audioData = <-audioDataCh
 			slog.Debug("user stopped speaking", "callId", id.String())
 			start := time.Now()
@@ -148,20 +148,19 @@ func Handle(pCtx context.Context, c net.Conn) {
 			} else {
 				slog.Debug(fmt.Sprintf("transcription generated: %s", transcription), "callId", id.String())
 			}
-			queryToChatgpt := fmt.Sprintf(common.ChatgptQueries["language"], transcription)
-			slog.Debug(fmt.Sprintf("query to detect language: %s", queryToChatgpt), "callId", id.String())
-			language, err = openai.ConsultChatGpt(openaiClient, queryToChatgpt)
-			if err != nil {
-				slog.Error(fmt.Sprintf("failed to detect language: %v", err), "callId", id.String())
-				return
-			} else {
-				slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
+
+			if language == "" {
+				language, err = openai.DetectLanguage(openaiClient, transcription)
+				if err != nil {
+					slog.Error(fmt.Sprintf("failed to detect language: %v", err), "callId", id.String())
+					return
+				} else {
+					slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
+				}
 			}
 
 			if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-				queryToChatgpt := fmt.Sprintf(common.ChatgptQueries["translation"], transcription, assistantLanguage)
-				slog.Debug(fmt.Sprintf("query to translate: %s", queryToChatgpt), "callId", id.String())
-				transcription, err = openai.ConsultChatGpt(openaiClient, queryToChatgpt)
+				transcription, err = openai.TranslateText(openaiClient, transcription, assistantLanguage)
 				if err != nil {
 					slog.Error(fmt.Sprintf("failed to translate transcription: %v", err), "callId", id.String())
 					return
@@ -169,6 +168,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 					slog.Debug(fmt.Sprintf("translated transcription: %s", transcription), "callId", id.String())
 				}
 			}
+
 			go deleteFile(inputAudioFile)
 
 			respBody, err := rasa.SendMessage("webhooks/rest/webhook", id.String(), transcription)
@@ -191,7 +191,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 			picoTtsLanguage := choosePicoTtsLanguage(language)
 			for _, response := range responses {
 				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-					response.Text, err = openai.ConsultChatGpt(openaiClient, fmt.Sprintf(common.ChatgptQueries["translation"], response.Text, language))
+					response.Text, err = openai.TranslateText(openaiClient, response.Text, language)
 					if err != nil {
 						slog.Error(fmt.Sprintf("failed to translate response: %v", err), "callId", id.String())
 						return
@@ -244,7 +244,7 @@ func choosePicoTtsLanguage(language string) string {
 	}
 }
 
-func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bool, audioDataCh chan []byte) {
+func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking chan bool, audioDataCh chan []byte) {
 	var silenceStart time.Time
 	var messageData []byte
 	detectingSilence := false
@@ -254,6 +254,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 
 		if errors.Cause(err) == io.EOF {
 			slog.Info("Received hangup from asterisk", "callId", id.String())
+			language = ""
 			cancel()
 			return
 		} else if err != nil {
@@ -263,7 +264,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 		switch m.Kind() {
 		case audiosocket.KindHangup:
 			slog.Debug("audiosocket received hangup command", "callId", id.String())
-			hangupCh <- true
+			userEndSpeaking <- true
 			return
 		case audiosocket.KindError:
 			slog.Warn("Packet loss when sending to audiosocket", "callId", id.String())
@@ -283,7 +284,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, hangupCh chan bo
 					detectingSilence = true
 				} else if time.Since(silenceStart) >= silenceDuration {
 					slog.Debug("Detected silence", "callId", id.String())
-					hangupCh <- true
+					userEndSpeaking <- true
 					audioDataCh <- messageData
 					return
 				}

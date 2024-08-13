@@ -73,6 +73,7 @@ func deleteFile(filename string) {
 
 // sendHangupSignal sends a hangup signal to the client
 func sendHangupSignal(c net.Conn) {
+	language = ""
 	hangupMessage := audiosocket.HangupMessage()
 	if _, err := c.Write(hangupMessage); err != nil {
 		slog.Error(fmt.Sprintf("Failed to send hangup signal:", err), "callId", id.String())
