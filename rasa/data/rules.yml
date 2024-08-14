@@ -12,9 +12,9 @@ rules:
   steps:
   - intent: explain
   - action: utter_explanation
-- rule: Schedule a reminder
+- rule: remind call
   steps:
-  - intent: ask_remind
+  - intent: ask_remind_call
   - action: action_set_reminder
 - rule: forget reminder
   steps:
@@ -24,7 +24,15 @@ rules:
   steps:
   - intent: bye
   - action: utter_goodbye
-- rule: Trigger `action_react_to_reminder` for `EXTERNAL_reminder`
+- rule: convo action_tell_id
+  steps:
+  - intent: ask_id
+  - action: action_tell_id
+- rule: warn dry plant
+  steps:
+  - intent: EXTERNAL_dry_plant
+  - action: action_warn_dry
+- rule: react to reminder
   steps:
   - intent: EXTERNAL_reminder
   - action: action_react_to_reminder

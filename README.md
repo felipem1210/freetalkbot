@@ -55,7 +55,7 @@ Checkout the following resources to get more knowledge about RASA.
 
 If you modify any of the rasa files you will need to retrain the assistant, you can do it with `make rasa-train`
 
-**Disclaimer :** this bot still doesn't work properly. I am still in the learning path of rasa and NLP. 
+**Disclaimer :** this bot is not complete yet. It is doing what makes reminderbot example. I am still in the learning path of rasa and NLP. 
 
 ## Communication Channels
 

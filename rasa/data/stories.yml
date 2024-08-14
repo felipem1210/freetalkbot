@@ -4,5 +4,5 @@ stories:
     steps:
     - intent: greet
     - action: utter_greet
-    - intent: ask_remind
+    - intent: ask_remind_call
     - action: action_set_reminder

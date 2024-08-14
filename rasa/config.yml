@@ -15,7 +15,7 @@ pipeline:
 - name: SpacyNLP
   model: "en_core_web_md"
 - name: SpacyEntityExtractor
-  dimensions: ["REMINDER"]
+  dimensions: ["PERSON"]
 - name: "EntitySynonymMapper"
 
 policies:

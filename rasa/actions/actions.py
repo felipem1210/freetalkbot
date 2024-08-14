@@ -29,8 +29,9 @@ class ActionSetReminder(Action):
         domain: Dict[Text, Any],
     ) -> List[Dict[Text, Any]]:
 
-        dispatcher.utter_message("I will remind you in 10 seconds.")
-        date = datetime.datetime.now() + datetime.timedelta(seconds=10)
+        dispatcher.utter_message("I will remind you in 5 seconds.")
+
+        date = datetime.datetime.now() + datetime.timedelta(seconds=5)
         entities = tracker.latest_message.get("entities")
 
         reminder = ReminderScheduled(
@@ -40,6 +41,7 @@ class ActionSetReminder(Action):
             name="my_reminder",
             kill_on_user_message=False,
         )
+
         return [reminder]
 
 
@@ -56,8 +58,8 @@ class ActionReactToReminder(Action):
         domain: Dict[Text, Any],
     ) -> List[Dict[Text, Any]]:
 
-        what_to_remind = tracker.get_slot("REMINDER")
-        dispatcher.utter_message(f"Remember that you {what_to_remind}!")
+        name = tracker.get_slot("PERSON")
+        dispatcher.utter_message(f"Remember to call {name}!")
 
         return []
 
