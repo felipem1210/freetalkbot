@@ -74,6 +74,8 @@ CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
 
 2. Set the envars with `export $(cat ./.env | xargs)`
 
+3. Install `pkg-config`: `brew install pkg-config`
+
 3. Change the audiosocket server host in `asterisk/container-config/extensions_local.conf`
 
 ```sh

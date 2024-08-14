@@ -46,8 +46,9 @@ func GetEventHandler() func(interface{}) {
 
 func handleMessageEvent(v *events.Message) {
 	messageBody := v.Message.GetConversation()
-	jid = v.Info.Sender.String()
+	jid = parseJid(v.Info.Sender.String())
 	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
+
 	if messageBody != "" {
 		//var translation string
 		slog.Info("Received message", "jid", jid)
@@ -139,10 +140,20 @@ func handleMessageEvent(v *events.Message) {
 	}
 }
 
-func sendWhatsappResponse(to string, response *rasa.Response) (string, error) {
-	jid, err := types.ParseJID(to)
+func parseJid(jid string) string {
+	// Check if the JID is in the format phone_number@domain
+	// If is in format phone_number:device_id@domain, remove the device_id
+	if len(strings.Split(strings.Split(jid, "@")[0], ":")) == 2 {
+		fmt.Printf("JID: %s\n", jid)
+		jid = fmt.Sprintf("%s@%s", strings.Split(strings.Split(jid, "@")[0], ":")[0], strings.Split(jid, "@")[1])
+	}
+	return jid
+}
+
+func sendWhatsappResponse(jidStr string, response *rasa.Response) (string, error) {
+	jid, err := types.ParseJID(jidStr)
 	if err != nil {
-		return "", fmt.Errorf("invalid JID: %v", to)
+		return "", fmt.Errorf("invalid JID: %v", jidStr)
 	}
 	_, err = whatsappClient.SendMessage(context.Background(), jid, &waE2E.Message{
 		Conversation: proto.String(response.Text),
@@ -150,7 +161,7 @@ func sendWhatsappResponse(to string, response *rasa.Response) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to send message: %v", err)
 	}
-	return fmt.Sprintf("Message sent to %s", to), nil
+	return fmt.Sprintf("Message sent to %s", jidStr), nil
 }
 
 func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string, error) {
