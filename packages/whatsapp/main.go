@@ -12,9 +12,11 @@ import (
 	"strings"
 	"syscall"
 
+	gt "github.com/bas24/googletranslatefree"
 	"github.com/felipem1210/freetalkbot/packages/common"
 	openai "github.com/felipem1210/freetalkbot/packages/openai"
 	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
+	whisper "github.com/felipem1210/freetalkbot/packages/whisper-asr"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
@@ -31,6 +33,7 @@ var (
 	openaiClient      openai.Client
 	language          string
 	assistantLanguage string
+	transcription     string
 	jid               string
 	err               error
 )
@@ -53,22 +56,11 @@ func handleMessageEvent(v *events.Message) {
 		//var translation string
 		slog.Info("Received message", "jid", jid)
 
-		language, err = openai.DetectLanguage(openaiClient, messageBody)
-		if err != nil {
-			slog.Error(fmt.Sprintf("failed to detect language: %v", err), "jid", jid)
-			return
-		} else {
-			slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
-		}
+		language = common.DetectLanguage(messageBody)
+		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
 
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			messageBody, err = openai.TranslateText(openaiClient, messageBody, assistantLanguage)
-			if err != nil {
-				slog.Error(fmt.Sprintf("failed to translate messageBody: %v", err), "jid", jid)
-				return
-			} else {
-				slog.Debug(fmt.Sprintf("translated messageBody: %s", messageBody), "jid", jid)
-			}
+			messageBody, _ = gt.Translate(messageBody, language, assistantLanguage)
 		}
 
 		rasaUri := rasa.ChooseUri(messageBody)
@@ -85,13 +77,7 @@ func handleMessageEvent(v *events.Message) {
 			}
 			for _, response := range responses {
 				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-					response.Text, err = openai.TranslateText(openaiClient, response.Text, language)
-					if err != nil {
-						slog.Error(fmt.Sprintf("failed to translate response: %v", err), "jid", jid)
-						return
-					} else {
-						slog.Debug(fmt.Sprintf("translated response: %s", response.Text), "jid", jid)
-					}
+					response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
 				}
 				result, error := sendWhatsappResponse(jid, &response)
 				if error != nil {
@@ -105,19 +91,15 @@ func handleMessageEvent(v *events.Message) {
 	}
 
 	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
-		transcription, err := transcribeAudio(audioMessage, v.Info.ID)
+		slog.Info("Received audio message", "jid", jid)
+		transcription, err = transcribeAudio(audioMessage, v.Info.ID)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error transcribing audio message: %s", err), "jid", jid)
 			return
 		}
 
-		language, err = openai.DetectLanguage(openaiClient, transcription)
-		if err != nil {
-			slog.Error(fmt.Sprintf("failed to detect language: %v", err), "jid", jid)
-			return
-		} else {
-			slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
-		}
+		language = common.DetectLanguage(transcription)
+		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
 
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 			transcription, err = openai.TranslateText(openaiClient, transcription, assistantLanguage)
@@ -165,6 +147,7 @@ func sendWhatsappResponse(jidStr string, response *rasa.Response) (string, error
 }
 
 func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string, error) {
+	sttTool := os.Getenv("STT_TOOL")
 	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
 	if err := downloadAudio(audioMessage.GetURL(), common.AudioEncPath); err != nil {
 		return "", err
@@ -173,9 +156,14 @@ func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string
 	if err := decryptAudioFile(common.AudioEncPath, audioFilePath, mediaKeyHex); err != nil {
 		return "", err
 	}
-	transcription, err := openai.TranscribeAudio(openaiClient, audioFilePath)
+	switch sttTool {
+	case "whisper-local":
+		transcription, err = whisper.TranscribeAudio(audioFilePath)
+	case "whisper":
+		transcription, err = openai.TranscribeAudio(openaiClient, audioFilePath)
+	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to transcribe audio: %v", err)
 	}
 	return transcription, nil
 }

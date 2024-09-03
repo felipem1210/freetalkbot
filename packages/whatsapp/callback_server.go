@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	gt "github.com/bas24/googletranslatefree"
 	openai "github.com/felipem1210/freetalkbot/packages/openai"
 	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/gin-gonic/gin"
@@ -33,16 +34,9 @@ func handleBotEndpoint(c *gin.Context) {
 		RecipientId: recipientID,
 		Text:        text,
 	})
-	var err error
 	for _, response := range callbackResponses {
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			response.Text, err = openai.TranslateText(openaiClient, response.Text, assistantLanguage)
-			if err != nil {
-				slog.Error(fmt.Sprintf("failed to translate response: %v", err), "jid", jid)
-				return
-			} else {
-				slog.Debug(fmt.Sprintf("translated response: %s", response.Text), "jid", jid)
-			}
+			response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
 		}
 
 		result, err := sendWhatsappResponse(recipientID, &response)

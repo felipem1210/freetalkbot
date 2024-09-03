@@ -18,10 +18,11 @@ var prCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		comChan, _ := cmd.Flags().GetString("communication-channel")
 		common.SetLogger(os.Getenv("LOG_LEVEL"))
+		validateEnv([]string{"RASA_URL", "ASSISTANT_LANGUAGE", "STT_TOOL", "OPENAI_TOKEN"})
 		if comChan == "audio" {
 			audiosocketserver.InitializeServer()
 		} else if comChan == "whatsapp" {
-			validateEnv([]string{"RASA_URL", "SQL_DB_FILE_NAME", "ASSISTANT_LANGUAGE", "OPENAI_TOKEN"})
+			validateEnv([]string{"SQL_DB_FILE_NAME"})
 			go whatsapp.InitializeCallbackServer()
 			whatsapp.InitializeServer()
 		}

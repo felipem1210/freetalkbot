@@ -39,7 +39,6 @@ RUN apk add --no-cache ca-certificates tzdata sqlite picotts soxr
 RUN addgroup -g 1001 freetalkbot && \
     adduser --disabled-password \
     --no-create-home --uid 1001 --ingroup freetalkbot freetalkbot
-USER freetalkbot
 
 # Set the working directory inside the container
 WORKDIR /app/
@@ -50,6 +49,8 @@ RUN mkdir /app/audios
 # Copy the binary from the build stage
 COPY --from=builder /freetalkbot /usr/local/bin/freetalkbot
 COPY --from=builder /go/bin/whatsapp-media-decrypt /usr/local/bin/whatsapp-media-decrypt
+
+USER freetalkbot
 
 # Expose the ports that the application will use
 EXPOSE 8080 443 5034
