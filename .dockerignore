@@ -15,3 +15,5 @@ LICENSE
 .air.toml
 .git/
 rasa/
+pulse/
+tmp/
