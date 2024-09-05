@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -14,7 +12,7 @@ import (
 
 	gt "github.com/bas24/googletranslatefree"
 	"github.com/felipem1210/freetalkbot/packages/common"
-	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
+	"github.com/felipem1210/freetalkbot/packages/rasa"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
@@ -36,7 +34,7 @@ var (
 	err               error
 )
 
-func GetEventHandler() func(interface{}) {
+func getEventHandler() func(interface{}) {
 	return func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Message:
@@ -51,89 +49,63 @@ func handleMessageEvent(v *events.Message) {
 	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
 
 	if messageBody != "" {
-		//var translation string
-		slog.Info("Received message", "jid", jid)
-
-		language = common.DetectLanguage(messageBody)
-		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
-
-		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			messageBody, _ = gt.Translate(messageBody, language, assistantLanguage)
-		}
-
-		rasaUri := rasa.ChooseUri(messageBody)
-		respBody, err := rasa.SendMessage(rasaUri, jid, messageBody)
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error sending message: %s", err), "jid", jid)
-			return
-		}
-		if rasaUri == "webhooks/rest/webhook" {
-			responses, err := rasa.HandleResponseBody(respBody)
-			if err != nil {
-				slog.Error(fmt.Sprintf("Error handling response body: %s", err), "jid", jid)
-				return
-			}
-			for _, response := range responses {
-				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-					response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
-				}
-				result, error := sendWhatsappResponse(jid, &response)
-				if error != nil {
-					slog.Error(fmt.Sprintf("Error sending response: %s", error), "jid", jid)
-					return
-				} else {
-					slog.Info(result, "jid", jid)
-				}
-			}
-		}
-	}
-
-	if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
+		slog.Info("Received text message", "jid", jid)
+	} else if audioMessage := v.Message.GetAudioMessage(); audioMessage != nil {
 		slog.Info("Received audio message", "jid", jid)
 		transcription, err = transcribeAudio(audioMessage, v.Info.ID)
+		messageBody = transcription
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error transcribing audio message: %s", err), "jid", jid)
 			return
 		}
+	}
+	slog.Debug(fmt.Sprintf("message received: %s", messageBody), "jid", jid)
 
-		language = common.DetectLanguage(transcription)
-		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
+	language = common.DetectLanguage(messageBody)
+	slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
 
-		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			transcription, _ = gt.Translate(transcription, language, assistantLanguage)
-		}
+	if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
+		messageBody, _ = gt.Translate(messageBody, language, assistantLanguage)
+		slog.Debug(fmt.Sprintf("translated message: %s", messageBody), "jid", jid)
+	}
 
-		rasaUri := rasa.ChooseUri(transcription)
-		slog.Debug(fmt.Sprintf("rasa uri: %s", rasaUri), "jid", jid)
+	rasaHandler := rasa.Rasa{
+		MessageLanguage: language,
+		RasaLanguage:    assistantLanguage,
+	}
 
-		_, err = rasa.SendMessage(rasaUri, jid, transcription)
+	rasaHandler.Request.JsonBody = map[string]string{"sender": jid, "message": messageBody}
+	response, err := rasaHandler.Interact()
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "jid", jid)
+		return
+	}
+	slog.Debug(fmt.Sprintf("response from rasa: %v", response), "jid", jid)
+	handleResponses(response)
+}
+
+func handleResponses(response common.Response) {
+	for _, r := range response.RasaResponse {
+		result, error := sendWhatsappMessage(r.RecipientId, r.Text)
 		if err != nil {
-			slog.Error(fmt.Sprintf("Error sending message to rasa: %s", err), "jid", jid)
-			return
+			slog.Error(fmt.Sprintf("Error sending response: %s", error), "jid", jid)
+		} else {
+			slog.Info(result, "jid", r.RecipientId)
 		}
 	}
 }
 
-func parseJid(jid string) string {
-	// Check if the JID is in the format phone_number@domain
-	// If is in format phone_number:device_id@domain, remove the device_id
-	if len(strings.Split(strings.Split(jid, "@")[0], ":")) == 2 {
-		fmt.Printf("JID: %s\n", jid)
-		jid = fmt.Sprintf("%s@%s", strings.Split(strings.Split(jid, "@")[0], ":")[0], strings.Split(jid, "@")[1])
-	}
-	return jid
-}
-
-func sendWhatsappResponse(jidStr string, response *rasa.Response) (string, error) {
+func sendWhatsappMessage(jidStr string, message string) (string, error) {
 	jid, err := types.ParseJID(jidStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid JID: %v", jidStr)
 	}
 	_, err = whatsappClient.SendMessage(context.Background(), jid, &waE2E.Message{
-		Conversation: proto.String(response.Text),
+		Conversation: proto.String(message),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to send message: %v", err)
+
 	}
 	return fmt.Sprintf("Message sent to %s", jidStr), nil
 }
@@ -152,36 +124,6 @@ func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string
 	slog.Debug(fmt.Sprintf("transcription: %s", transcription), "jid", jid)
 
 	return transcription, nil
-}
-
-func decryptAudioFile(inputFilePath, outputFilePath, mediaKey string) error {
-	cmdString := fmt.Sprintf("whatsapp-media-decrypt -o %s -t 3 %s %s", outputFilePath, inputFilePath, mediaKey)
-	err := common.ExecuteCommand(cmdString)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func downloadAudio(url, dest string) error {
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP error: %s", resp.Status)
-	}
-
-	_, err = io.Copy(out, resp.Body)
-	return err
 }
 
 func InitializeServer() {
@@ -206,7 +148,7 @@ func InitializeServer() {
 
 	clientLog := waLog.Stdout("Client", "INFO", true)
 	whatsappClient = whatsmeow.NewClient(deviceStore, clientLog)
-	whatsappClient.AddEventHandler(GetEventHandler())
+	whatsappClient.AddEventHandler(getEventHandler())
 	handleClientConnection(whatsappClient)
 }
 

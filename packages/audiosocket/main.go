@@ -29,7 +29,6 @@ import (
 const (
 	listenAddr       = ":8080"
 	inputAudioFormat = "pcm16" // "g711" or "pcm16"
-	languageCode     = "en-US"
 
 	// slinChunkSize is the number of bytes which should be sent per Slin
 	// audiosocket message.  Larger data will be chunked into this size for
@@ -94,6 +93,7 @@ func listen(ctx context.Context) error {
 func Handle(pCtx context.Context, c net.Conn) {
 	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
 	var transcription string
+
 	ctx, cancel = context.WithTimeout(pCtx, MaxCallDuration)
 	defer cancel()
 	id, err = audiosocket.GetID(c)
@@ -158,31 +158,28 @@ func Handle(pCtx context.Context, c net.Conn) {
 				slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
 			}
 
-			if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
+			if assistantLanguage != language {
 				transcription, _ = gt.Translate(transcription, language, assistantLanguage)
 			}
 
 			go deleteFile(inputAudioFile)
 
-			respBody, err := rasa.SendMessage("webhooks/rest/webhook", id.String(), transcription)
-			if err != nil {
-				slog.Error(fmt.Sprintf("failed to send message to rasa: %v", err), "callId", id.String())
-				return
-			} else {
-				slog.Debug("message sent to rasa", "callId", id.String())
+			rasaHandler := rasa.Rasa{
+				MessageLanguage: language,
+				RasaLanguage:    assistantLanguage,
 			}
 
-			responses, err := rasa.HandleResponseBody(respBody)
+			rasaHandler.Request.JsonBody = map[string]string{"sender": id.String(), "message": transcription}
+			responses, err := rasaHandler.Interact()
 			if err != nil {
-				slog.Error(fmt.Sprintf("failed to handle response body: %v", err), "callId", id.String())
+				slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "callId", id.String())
 				return
-			} else {
-				slog.Debug(fmt.Sprintf("response received: %s", responses), "callId", id.String())
 			}
+			slog.Debug(fmt.Sprintf("response received: %s", responses), "callId", id.String())
 
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			picoTtsLanguage := choosePicoTtsLanguage(language)
-			for _, response := range responses {
+			for _, response := range responses.RasaResponse {
 				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 					response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
 				}

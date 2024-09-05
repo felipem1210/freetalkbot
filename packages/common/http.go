@@ -20,7 +20,17 @@ type PostHttpReq struct {
 	FilePath      string
 }
 
-func (r *PostHttpReq) SendPost(ct string) (*http.Response, error) {
+type RasaResponse struct {
+	RecipientId string `json:"recipient_id"`
+	Text        string `json:"text"`
+	//Image       string `json:"image"`
+}
+
+type Response struct {
+	RasaResponse []RasaResponse
+}
+
+func (r *PostHttpReq) SendPost(ct string) (io.ReadCloser, error) {
 	var requestBody bytes.Buffer
 	var ctContent string
 
@@ -61,15 +71,12 @@ func (r *PostHttpReq) SendPost(ct string) (*http.Response, error) {
 		ctContent = writer.FormDataContentType()
 
 	case "json":
-		// data := map[string]string{
-		// 	"sender":  jid,
-		// 	"message": m,
-		// }
 		jsonData, err := json.Marshal(r.JsonBody)
 		requestBody = *bytes.NewBuffer(jsonData)
 		if err != nil {
 			return nil, fmt.Errorf("error converting data to JSON: %s", err)
 		}
+		ctContent = "application/json"
 	}
 
 	// Create a POST request
@@ -94,16 +101,21 @@ func (r *PostHttpReq) SendPost(ct string) (*http.Response, error) {
 		return nil, fmt.Errorf("error sending request: %w", err)
 	}
 
-	return resp, nil
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("error response from server: %s", body)
+	}
+
+	return resp.Body, nil
 }
 
 // processResponseBody reads and processes the body of an HTTP response.
-func ProcessResponseString(resp *http.Response) (string, error) {
+func ProcessResponseString(respBody io.ReadCloser) (string, error) {
 	// Ensure the response body is closed after reading
-	defer resp.Body.Close()
+	defer respBody.Close()
 
 	// Read the body
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(respBody)
 	if err != nil {
 		return "", fmt.Errorf("error reading response body: %w", err)
 	}
@@ -114,23 +126,29 @@ func ProcessResponseString(resp *http.Response) (string, error) {
 	return bodyString, nil
 }
 
-// processJSONResponse reads and processes the JSON body of an HTTP response.
-func ProcessJSONResponse(resp *http.Response) (map[string]interface{}, error) {
+// // processJSONResponse reads and processes the JSON body of an HTTP response.
+func (r Response) ProcessJSONResponse(respBody io.ReadCloser) (Response, error) {
+	//at := os.Getenv("ASSISTANT_TOOL")
+	at := "rasa"
 	// Ensure the response body is closed after reading
-	defer resp.Body.Close()
+	defer respBody.Close()
 
+	if respBody == nil {
+		return r, fmt.Errorf("received a nil response body")
+	}
 	// Read the body
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(respBody)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
+		return r, fmt.Errorf("error reading response body: %w", err)
 	}
 
-	// Unmarshal the JSON into a map
-	var result map[string]interface{}
-	err = json.Unmarshal(bodyBytes, &result)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling JSON: %w", err)
+	switch at {
+	case "rasa":
+		err = json.Unmarshal(bodyBytes, &r.RasaResponse)
 	}
 
-	return result, nil
+	if err != nil {
+		return r, fmt.Errorf("error unmarshaling JSON: %w", err)
+	}
+	return r, nil
 }

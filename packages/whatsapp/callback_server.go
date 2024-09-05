@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	gt "github.com/bas24/googletranslatefree"
-	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
+	"github.com/felipem1210/freetalkbot/packages/common"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +20,6 @@ func InitializeCallbackServer() {
 }
 
 func handleBotEndpoint(c *gin.Context) {
-	var callbackResponses []rasa.Response
 	var requestBody map[string]interface{}
 	if err := c.BindJSON(&requestBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
@@ -28,21 +27,19 @@ func handleBotEndpoint(c *gin.Context) {
 	}
 	recipientID := fmt.Sprintf("%v", requestBody["recipient_id"])
 	text := fmt.Sprintf("%v", requestBody["text"])
-	callbackResponses = append(callbackResponses, rasa.Response{
-		RecipientId: recipientID,
-		Text:        text,
-	})
-	for _, response := range callbackResponses {
+	response := common.Response{}
+	response.RasaResponse = append(response.RasaResponse, common.RasaResponse{RecipientId: recipientID, Text: text})
+
+	for _, r := range response.RasaResponse {
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
+			r.Text, _ = gt.Translate(r.Text, assistantLanguage, language)
 		}
 
-		result, err := sendWhatsappResponse(recipientID, &response)
+		result, err := sendWhatsappMessage(recipientID, r.Text)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error sending response: %s", err), "jid", jid)
-		} else {
-			slog.Info(result, "jid", jid)
 		}
+		slog.Info(result, "jid", jid)
 	}
-	c.JSON(http.StatusOK, callbackResponses)
+	c.JSON(http.StatusOK, response.RasaResponse)
 }
