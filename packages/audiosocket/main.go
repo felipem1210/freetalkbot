@@ -14,10 +14,13 @@ import (
 	"strings"
 	"time"
 
+	gt "github.com/bas24/googletranslatefree"
+
 	"github.com/CyCoreSystems/audiosocket"
 	"github.com/felipem1210/freetalkbot/packages/common"
 	"github.com/felipem1210/freetalkbot/packages/openai"
 	"github.com/felipem1210/freetalkbot/packages/rasa"
+	"github.com/felipem1210/freetalkbot/packages/whisper-asr"
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/gofrs/uuid"
@@ -90,6 +93,8 @@ func listen(ctx context.Context) error {
 // Handle processes a call
 func Handle(pCtx context.Context, c net.Conn) {
 	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
+	sttTool := os.Getenv("STT_TOOL")
+	var transcription string
 	ctx, cancel = context.WithTimeout(pCtx, MaxCallDuration)
 	defer cancel()
 	id, err = audiosocket.GetID(c)
@@ -141,7 +146,16 @@ func Handle(pCtx context.Context, c net.Conn) {
 				slog.Debug("generated audio wav file", "callId", id.String())
 			}
 
-			transcription, err := openai.TranscribeAudio(openaiClient, inputAudioFile)
+			switch sttTool {
+			case "whisper-local":
+				transcription, err = whisper.TranscribeAudio(inputAudioFile)
+			case "whisper":
+				transcription, err = openai.TranscribeAudio(openaiClient, inputAudioFile)
+			}
+
+			language = common.DetectLanguage(transcription)
+			slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
+
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to transcribe audio: %v", err), "callId", id.String())
 				return
@@ -149,24 +163,8 @@ func Handle(pCtx context.Context, c net.Conn) {
 				slog.Debug(fmt.Sprintf("transcription generated: %s", transcription), "callId", id.String())
 			}
 
-			if language == "" {
-				language, err = openai.DetectLanguage(openaiClient, transcription)
-				if err != nil {
-					slog.Error(fmt.Sprintf("failed to detect language: %v", err), "callId", id.String())
-					return
-				} else {
-					slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
-				}
-			}
-
 			if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-				transcription, err = openai.TranslateText(openaiClient, transcription, assistantLanguage)
-				if err != nil {
-					slog.Error(fmt.Sprintf("failed to translate transcription: %v", err), "callId", id.String())
-					return
-				} else {
-					slog.Debug(fmt.Sprintf("translated transcription: %s", transcription), "callId", id.String())
-				}
+				transcription, _ = gt.Translate(transcription, language, assistantLanguage)
 			}
 
 			go deleteFile(inputAudioFile)
@@ -191,13 +189,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 			picoTtsLanguage := choosePicoTtsLanguage(language)
 			for _, response := range responses {
 				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-					response.Text, err = openai.TranslateText(openaiClient, response.Text, language)
-					if err != nil {
-						slog.Error(fmt.Sprintf("failed to translate response: %v", err), "callId", id.String())
-						return
-					} else {
-						slog.Debug(fmt.Sprintf("translated response: %s", response.Text), "callId", id.String())
-					}
+					response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
 				}
 
 				picoTtsCmd := fmt.Sprintf("pico2wave -l %s -w %s \"%s\"", picoTtsLanguage, responseAudioFile, response.Text)
@@ -258,7 +250,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking 
 			cancel()
 			return
 		} else if err != nil {
-			slog.Error(fmt.Sprintf("error reading message:", err), "callId", id.String())
+			slog.Error(fmt.Sprintf("error reading message: %s", err), "callId", id.String())
 			return
 		}
 		switch m.Kind() {

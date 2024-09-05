@@ -24,6 +24,23 @@ services:
       - ./pulse:/run/pulse:rshared          # Use host audio
       - /etc/localtime:/etc/localtime:ro    # Use host timezone    
 
+  whisper:
+    profiles:
+      - whisper-asr
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    platform: linux/amd64
+    networks: 
+      - freetalkbot
+    ports:
+      - "9000:9000"
+    environment:
+      - ASR_MODEL=base
+      - ASR_ENGINE=faster_whisper
+    env_file:
+      - .env
+    volumes:
+      - asr_model:/root/.cache/whisper
+    
   gobot_voip:
     build:
       context: .
@@ -87,6 +104,7 @@ services:
 volumes:
   asterisk-conf:
   app_data:
+  asr_model:
 
 networks:
   freetalkbot:

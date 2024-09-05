@@ -3,10 +3,12 @@ Your own IA to handle communications with your customers via phonecalls or whats
 
 ## Dependencies
 
-* Go version recommended: 1.22
+* Golang. Version recommended: 1.22
+* Golang packages. Check [go.mod](./go.mod) file
 * [whatsapp-media-decrypt](https://github.com/ddz/whatsapp-media-decrypt/tree/master) tool
 * [picotts](https://github.com/ihuguet/picotts)
-* Install dependencies with `go mod tidy`
+
+Install go dependencies with `go mod tidy`. Run it as well if you add a new package
 
 For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
 
@@ -22,6 +24,7 @@ The components added in the `docker-compose.yml` file are:
 * Asterisk
 * [Rasa assistant](https://rasa.com/)
 * Rasa Actions server
+* [Whisper ASR](https://ahmetoner.com/whisper-asr-webservice/) (optional)
 * Audio bot server
 * Whatsapp bot server
 
@@ -31,7 +34,8 @@ Run `make build`
 
 ## Run the solution
 
-Run `make run`
+* Without whisper-asr: `make run`
+* With whisper-asr: `make run-whisper-asr`
 
 ### Configure asterisk
 
@@ -70,6 +74,7 @@ The docker-compose file alreay deploys it, but if you want to develop on it loca
 ```sh
 RASA_URL=http://localhost:5005
 CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
+WHISPER_ASR_URL=http://host.docker.internal:9000 #if you are using it
 ```
 
 2. Set the envars with `export $(cat ./.env | xargs)`
@@ -90,8 +95,7 @@ CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
 Same variables than audio bot are needed, just change the make command `make run-local-whatsapp`
 
 After initialize you will see in the logs a QR code. Scan that QR code with the whatsapp account that you will use.
-If you can't scan the QR code you can also link the whatsapp account using a pair code. For that you must set the envar `PAIR_PHONE_NUMBER` with 
-your phone number using format show in the `.env.example`. If you don't need the pair code don't set this envar.
+If you can't scan the QR code you can also link the whatsapp account using a pair code. For that you must set the envar `PAIR_PHONE_NUMBER` with your phone number using format show in the `.env.example`. If you don't need the pair code don't set this envar.
 
 Once you pair your whatsapp account the session will be stored in a sqlite file. This file is created inside the container but mapped through a docker volume, so you can use it when you want to develop locally. If you delete this file you will have to login again using a new QR code.
 
@@ -106,3 +110,4 @@ The following projects inspired to the construction of this one:
 
 * [audiosocket](https://github.com/CyCoreSystems/audiosocket)
 * [whatsmeow-quickstart](https://github.com/codespearhead/whatsmeow-quickstart)
+* [Whisper ASR webservice](https://github.com/ahmetoner/whisper-asr-webservice)

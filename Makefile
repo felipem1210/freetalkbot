@@ -1,10 +1,13 @@
 SHELL := /bin/zsh
 
 build:
-	docker-compose build
+	COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build
 
 run:
 	docker-compose up -d
+
+run-whisper-asr:
+	docker-compose --profile whisper-asr up -d
 
 run-local-audio:
 	docker-compose down
