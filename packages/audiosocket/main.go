@@ -146,16 +146,16 @@ func Handle(pCtx context.Context, c net.Conn) {
 			}
 
 			transcription, err = common.TranscribeAudio(inputAudioFile, openaiClient)
-			slog.Debug(fmt.Sprintf("transcription: %s", transcription), "callId", id.String())
-
-			language = common.DetectLanguage(transcription)
-			slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
-
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to transcribe audio: %v", err), "callId", id.String())
 				return
 			} else {
 				slog.Debug(fmt.Sprintf("transcription generated: %s", transcription), "callId", id.String())
+			}
+
+			if language == "" {
+				language = common.DetectLanguage(transcription)
+				slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
 			}
 
 			if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
