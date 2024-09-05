@@ -14,9 +14,7 @@ import (
 
 	gt "github.com/bas24/googletranslatefree"
 	"github.com/felipem1210/freetalkbot/packages/common"
-	openai "github.com/felipem1210/freetalkbot/packages/openai"
 	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
-	whisper "github.com/felipem1210/freetalkbot/packages/whisper-asr"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
@@ -30,7 +28,7 @@ import (
 
 var (
 	whatsappClient    *whatsmeow.Client
-	openaiClient      openai.Client
+	openaiClient      common.OpenaiClient
 	language          string
 	assistantLanguage string
 	transcription     string
@@ -102,13 +100,7 @@ func handleMessageEvent(v *events.Message) {
 		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
 
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			transcription, err = openai.TranslateText(openaiClient, transcription, assistantLanguage)
-			if err != nil {
-				slog.Error(fmt.Sprintf("failed to translate transcription: %v", err), "jid", jid)
-				return
-			} else {
-				slog.Debug(fmt.Sprintf("translated transcription: %s", messageBody), "jid", jid)
-			}
+			transcription, _ = gt.Translate(transcription, language, assistantLanguage)
 		}
 
 		rasaUri := rasa.ChooseUri(transcription)
@@ -147,7 +139,6 @@ func sendWhatsappResponse(jidStr string, response *rasa.Response) (string, error
 }
 
 func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string, error) {
-	sttTool := os.Getenv("STT_TOOL")
 	mediaKeyHex := hex.EncodeToString(audioMessage.GetMediaKey())
 	if err := downloadAudio(audioMessage.GetURL(), common.AudioEncPath); err != nil {
 		return "", err
@@ -156,15 +147,10 @@ func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string
 	if err := decryptAudioFile(common.AudioEncPath, audioFilePath, mediaKeyHex); err != nil {
 		return "", err
 	}
-	switch sttTool {
-	case "whisper-local":
-		transcription, err = whisper.TranscribeAudio(audioFilePath)
-	case "whisper":
-		transcription, err = openai.TranscribeAudio(openaiClient, audioFilePath)
-	}
-	if err != nil {
-		return "", fmt.Errorf("failed to transcribe audio: %v", err)
-	}
+
+	transcription, err = common.TranscribeAudio(audioFilePath, openaiClient)
+	slog.Debug(fmt.Sprintf("transcription: %s", transcription), "jid", jid)
+
 	return transcription, nil
 }
 
@@ -214,7 +200,9 @@ func InitializeServer() {
 		os.Exit(1)
 	}
 
-	openaiClient = openai.CreateNewClient()
+	if os.Getenv("STT_TOOL") == "whisper" {
+		openaiClient = common.CreateOpenAiClient()
+	}
 
 	clientLog := waLog.Stdout("Client", "INFO", true)
 	whatsappClient = whatsmeow.NewClient(deviceStore, clientLog)

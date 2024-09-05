@@ -7,13 +7,11 @@ import (
 	"strings"
 
 	gt "github.com/bas24/googletranslatefree"
-	openai "github.com/felipem1210/freetalkbot/packages/openai"
 	rasa "github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/gin-gonic/gin"
 )
 
 func InitializeCallbackServer() {
-	openaiClient = openai.CreateNewClient()
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.POST("/bot", handleBotEndpoint)

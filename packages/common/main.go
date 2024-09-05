@@ -13,13 +13,6 @@ const (
 	AudioEncPath = AudioDir + "audio.enc"
 )
 
-var (
-	ChatgptQueries = map[string]string{
-		"language":    "Identify the language of this text: %s. Give me only the language code in lowercase letters.",
-		"translation": "Translate this text: %s to this language %s",
-	}
-)
-
 func ExecuteCommand(cmdString string) error {
 	cmd := exec.Command("/bin/sh", "-c", cmdString)
 	var out, stderr strings.Builder

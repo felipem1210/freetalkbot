@@ -18,9 +18,7 @@ import (
 
 	"github.com/CyCoreSystems/audiosocket"
 	"github.com/felipem1210/freetalkbot/packages/common"
-	"github.com/felipem1210/freetalkbot/packages/openai"
 	"github.com/felipem1210/freetalkbot/packages/rasa"
-	"github.com/felipem1210/freetalkbot/packages/whisper-asr"
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/gofrs/uuid"
@@ -55,7 +53,7 @@ var (
 	language          string
 )
 
-var openaiClient openai.Client
+var openaiClient common.OpenaiClient
 
 func init() {
 }
@@ -65,7 +63,9 @@ var ErrHangup = errors.New("Hangup")
 
 func InitializeServer() {
 	ctx = context.Background()
-	openaiClient = openai.CreateNewClient()
+	if os.Getenv("STT_TOOL") == "whisper" {
+		openaiClient = common.CreateOpenAiClient()
+	}
 	slog.Info(fmt.Sprintf("listening for AudioSocket connections on %s", listenAddr))
 	if err = listen(ctx); err != nil {
 		log.Fatalln("listen failure:", err)
@@ -93,7 +93,6 @@ func listen(ctx context.Context) error {
 // Handle processes a call
 func Handle(pCtx context.Context, c net.Conn) {
 	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
-	sttTool := os.Getenv("STT_TOOL")
 	var transcription string
 	ctx, cancel = context.WithTimeout(pCtx, MaxCallDuration)
 	defer cancel()
@@ -146,12 +145,8 @@ func Handle(pCtx context.Context, c net.Conn) {
 				slog.Debug("generated audio wav file", "callId", id.String())
 			}
 
-			switch sttTool {
-			case "whisper-local":
-				transcription, err = whisper.TranscribeAudio(inputAudioFile)
-			case "whisper":
-				transcription, err = openai.TranscribeAudio(openaiClient, inputAudioFile)
-			}
+			transcription, err = common.TranscribeAudio(inputAudioFile, openaiClient)
+			slog.Debug(fmt.Sprintf("transcription: %s", transcription), "callId", id.String())
 
 			language = common.DetectLanguage(transcription)
 			slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
