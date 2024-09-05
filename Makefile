@@ -6,8 +6,8 @@ build:
 run:
 	docker-compose up -d
 
-run-whisper-local:
-	docker-compose --profile whisper-local up -d
+run-whisper-asr:
+	docker-compose --profile whisper-asr up -d
 
 run-local-audio:
 	docker-compose down

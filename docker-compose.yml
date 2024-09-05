@@ -26,7 +26,7 @@ services:
 
   whisper:
     profiles:
-      - whisper-local
+      - whisper-asr
     image: onerahmet/openai-whisper-asr-webservice:latest
     platform: linux/amd64
     networks: 

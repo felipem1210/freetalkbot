@@ -9,7 +9,7 @@ import (
 
 func TranscribeAudio(audioFilePath string) (string, error) {
 	request := &common.PostHttpReq{
-		Url:     fmt.Sprintf("%s/%s", os.Getenv("WHISPER_URL"), "asr"),
+		Url:     fmt.Sprintf("%s/%s", os.Getenv("WHISPER_ASR_URL"), "asr"),
 		Headers: map[string]string{"Content-type": "multipart/form-data"},
 		FormParams: map[string]string{
 			"output":   "text",
