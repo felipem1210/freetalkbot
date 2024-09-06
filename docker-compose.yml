@@ -101,6 +101,16 @@ services:
     networks:
       - freetalkbot
 
+  anthropic:
+    build:
+      context: ./anthropic
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    networks:
+      - freetalkbot
+
 volumes:
   asterisk-conf:
   app_data:

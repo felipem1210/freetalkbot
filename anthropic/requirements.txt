@@ -1,0 +1,4 @@
+anthropic>=0.34
+flask>=3.0
+beautifulsoup4
+google

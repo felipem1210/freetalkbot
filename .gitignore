@@ -31,3 +31,5 @@ rasa/.*
 rasa/pip
 rasa/actions/__pycache__/
 rasa/models/
+**/__pycache__/
+**/.ipynb_checkpoints

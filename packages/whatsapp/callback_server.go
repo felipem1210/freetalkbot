@@ -27,10 +27,10 @@ func handleBotEndpoint(c *gin.Context) {
 	}
 	recipientID := fmt.Sprintf("%v", requestBody["recipient_id"])
 	text := fmt.Sprintf("%v", requestBody["text"])
-	response := common.Response{}
-	response.RasaResponse = append(response.RasaResponse, common.RasaResponse{RecipientId: recipientID, Text: text})
+	responses := common.Responses{}
+	responses = append(responses, common.Response{RecipientId: recipientID, Text: text})
 
-	for _, r := range response.RasaResponse {
+	for _, r := range responses {
 		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 			r.Text, _ = gt.Translate(r.Text, assistantLanguage, language)
 		}
@@ -41,5 +41,5 @@ func handleBotEndpoint(c *gin.Context) {
 		}
 		slog.Info(result, "jid", jid)
 	}
-	c.JSON(http.StatusOK, response.RasaResponse)
+	c.JSON(http.StatusOK, responses)
 }
