@@ -1,24 +1,26 @@
 package rasa
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
+	"log/slog"
 	"os"
 	"regexp"
+	"strings"
+
+	gt "github.com/bas24/googletranslatefree"
+
+	"github.com/felipem1210/freetalkbot/packages/common"
 )
 
 // Define a structure to match the JSON response
-type Response struct {
-	RecipientId string `json:"recipient_id"`
-	Text        string `json:"text"`
-	//Image       string `json:"image"`
+type Rasa struct {
+	Request         common.PostHttpReq
+	Response        common.Response
+	MessageLanguage string
+	RasaLanguage    string
 }
 
-func ChooseUri(text string) string {
+func chooseUri(text string) string {
 	re := regexp.MustCompile(`(?i)\b(remind|remember)\b`)
 	if re.MatchString(text) {
 		return "webhooks/callback/webhook"
@@ -27,54 +29,31 @@ func ChooseUri(text string) string {
 	}
 }
 
-func SendMessage(e string, jid string, m string) (io.ReadCloser, error) {
-	rasaUrl := fmt.Sprintf("%s/%s", os.Getenv("RASA_URL"), e)
-	data := map[string]string{
-		"sender":  jid,
-		"message": m,
-	}
-	jsonData, err := json.Marshal(data)
+func (r Rasa) Interact() (common.Response, error) {
+	rasaResponse := r.Response
+	requestBody := r.Request.JsonBody
+	slog.Debug(fmt.Sprintf("Message for rasa: %v", requestBody["message"]), "jid", requestBody["sender"])
+	rasaUri := fmt.Sprintf("%s/%s", os.Getenv("RASA_URL"), chooseUri(requestBody["message"]))
+	r.Request.Url = rasaUri
+	body, err := r.Request.SendPost("json")
 	if err != nil {
-		return nil, fmt.Errorf("error converting data to JSON: %s", err)
+		return rasaResponse, fmt.Errorf("error sending message: %s", err)
 	}
 
-	req, err := http.NewRequest("POST", rasaUrl, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %s", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error sending request: %s", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("error response from server: %s", body)
-	}
-
-	return resp.Body, nil
-}
-
-func HandleResponseBody(respBody io.ReadCloser) ([]Response, error) {
-	var responses []Response
-	if respBody == nil {
-		return nil, fmt.Errorf("received a nil response body")
-	}
-	body, err := io.ReadAll(respBody)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response: %s", err)
-	}
-	if json.Valid(body) {
-		err = json.Unmarshal(body, &responses)
+	response := common.Response{}
+	if strings.Contains(rasaUri, "webhooks/rest/webhook") {
+		response, err = rasaResponse.ProcessJSONResponse(body)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing JSON response: %s", err)
+			return response, fmt.Errorf("error handling response body: %s", err)
 		}
-	} else {
-		log.Fatalf("Received non-JSON response: %s", body)
+
+		for i, responseStruct := range response.RasaResponse {
+			if r.RasaLanguage != r.MessageLanguage {
+				responseStruct.Text, _ = gt.Translate(responseStruct.Text, r.RasaLanguage, r.MessageLanguage)
+				// Add the translated text to the response and remove the original text
+				response.RasaResponse[i].Text = responseStruct.Text
+			}
+		}
 	}
-	defer respBody.Close()
-	return responses, nil
+	return response, nil
 }
