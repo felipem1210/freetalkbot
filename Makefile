@@ -36,26 +36,26 @@ endif
 
 
 build:
-        COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 $(CONTAINER_CLI) compose build
+	COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 $(CONTAINER_CLI) compose build
 
 run:
-        $(CONTAINER_CLI) compose up -d
+	$(CONTAINER_CLI) compose up -d
 
 run-whisper-asr:
-        $(CONTAINER_CLI) compose --profile whisper-asr up -d
+	$(CONTAINER_CLI) compose --profile whisper-asr up -d
 
 run-local-audio:
-        $(CONTAINER_CLI) compose down
-        $(CONTAINER_CLI) compose up -d
-        $(CONTAINER_CLI) compose stop gobot_voip
-        air -- init -c audio
+	$(CONTAINER_CLI) compose down
+	$(CONTAINER_CLI) compose up -d
+	$(CONTAINER_CLI) compose stop gobot_voip
+	air -- init -c audio
 
 run-local-whatsapp:
-        $(CONTAINER_CLI) compose down
-        $(CONTAINER_CLI) compose up -d
-        $(CONTAINER_CLI) compose stop gobot_whatsapp
-        air -- init -c whatsapp
+	$(CONTAINER_CLI) compose down
+	$(CONTAINER_CLI) compose up -d
+	$(CONTAINER_CLI) compose stop gobot_whatsapp
+	air -- init -c whatsapp
 
 rasa-train:
-        $(CONTAINER_CLI) compose exec rasa rasa train
-        $(CONTAINER_CLI) compose restart rasa
+	$(CONTAINER_CLI) compose exec rasa rasa train
+	$(CONTAINER_CLI) compose restart rasa
