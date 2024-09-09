@@ -53,12 +53,41 @@ func ulawToLinear(ulaw byte) int16 {
 	return value
 }
 
+// alawToLinear decodes a byte coded in G.711 A-law format to a 16-bit signed linear PCM value.
+func alawToLinear(alaw byte) int16 {
+	const QUANT_MASK = 0x0F // Quantization field mask.
+	const SEG_MASK = 0x70   // Segment field mask.
+	const SEG_SHIFT = 4     // Left shift for segment number.
+	const BIAS = 0x84       // Bias for linear code.
+
+	alaw ^= 0x55
+
+	segment := (alaw & SEG_MASK) >> SEG_SHIFT
+	mantissa := alaw & QUANT_MASK
+	linear := int16(mantissa<<4) + BIAS
+
+	if segment != 0 {
+		linear += 0x100 << (segment - 1)
+	}
+
+	if alaw&0x80 != 0 {
+		return -linear
+	}
+	return linear
+}
+
 // Calculate volume data for G711 audio data
-func calculateVolumeG711(buffer []byte) float64 {
+func calculateVolumeG711(buffer []byte, codec string) float64 {
 	var sum float64
+	var sample int16
 	sampleCount := len(buffer)
-	for _, ulaw := range buffer {
-		sample := ulawToLinear(ulaw)
+	for _, data := range buffer {
+		switch codec {
+		case "ulaw":
+			sample = ulawToLinear(data)
+		case "alaw":
+			sample = alawToLinear(data)
+		}
 		sum += float64(sample) * float64(sample)
 	}
 	return math.Sqrt(sum / float64(sampleCount))
