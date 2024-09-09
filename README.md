@@ -1,5 +1,9 @@
 # freetalkbot
-Your own IA to handle communications with your customers via phonecalls or whatsapp
+
+Implementation of communication channels to interact with LLM/NLU bot assistants.
+
+* **Voice:** using [Audiosocket Asterisk](https://docs.asterisk.org/Configuration/Channel-Drivers/AudioSocket/) protocol
+* **Whatsapp:** using [whatsmeow](https://github.com/tulir/whatsmeow) library. NO need of Whatsapp Business account, 100% free.
 
 ## Dependencies
 
