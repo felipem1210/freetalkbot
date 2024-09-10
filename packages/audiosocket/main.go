@@ -29,6 +29,7 @@ import (
 const (
 	listenAddr       = ":8080"
 	inputAudioFormat = "pcm16" // "g711" or "pcm16"
+	inputAudioCodec  = "ulaw"  // "ulaw" or "alaw"
 
 	// slinChunkSize is the number of bytes which should be sent per Slin
 	// audiosocket message.  Larger data will be chunked into this size for
@@ -258,7 +259,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking 
 			var volume float64
 			// Check if there is audio data, indicating the user is speaking
 			if inputAudioFormat == "g711" {
-				volume = calculateVolumeG711(m.Payload())
+				volume = calculateVolumeG711(m.Payload(), inputAudioCodec)
 			} else {
 				volume = calculateVolumePCM16(m.Payload())
 			}
