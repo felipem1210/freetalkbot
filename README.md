@@ -93,10 +93,7 @@ If you can't scan the QR code you can also link the whatsapp account using a pai
 
 Once you pair your whatsapp account the session will be stored in a sqlite file. This file is created inside the container but mapped through a docker volume, so you can use it when you want to develop locally. If you delete this file you will have to login again using a new QR code.
 
-#### Features
-
-Now the code is prepared to receive text or voice messages.
-The assistant on this repository is a `reminderbot` that will send you reminders based on messages that you are sending to it 
+The channel is prepared to receive text or voice messages.
 
 ## Assistants
 
