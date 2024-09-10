@@ -26,17 +26,18 @@ All bot servers and Rasa assistant reads configuration from this file.
 The components added in the `docker-compose.yml` file are:
 
 * Asterisk
-* [Rasa assistant](https://rasa.com/)
+* Anthropic
+* Rasa assistant
 * Rasa Actions server
 * [Whisper ASR](https://ahmetoner.com/whisper-asr-webservice/) (optional)
 * Audio bot server
 * Whatsapp bot server
 
-## Build docker images
+### Build docker images
 
 Run `make build`
 
-## Run the solution
+### Run the solution
 
 * Without whisper-asr: `make run`
 * With whisper-asr: `make run-whisper-asr`
@@ -53,18 +54,6 @@ Asterisk is raised up in network_mode brige. The asterisk configuration files ar
 * For SIP checkout `pjsip_endpoint.conf` file in `asterisk/container-config` folder.
 * For IAX checkout iax.conf file in `asterisk/local-config` folder.
 
-### Rasa assistant
-
-The assistant is configured to be a reminderbot, inspired in the [example](https://github.com/RasaHQ/rasa/tree/main/examples/reminderbot) provided by rasa. The files in this folder are for NLP training of the assistant.
-Checkout the following resources to get more knowledge about RASA.
-
-* [Documentation](https://rasa.com/docs/rasa/training-data-format)
-* [Youtube Channel](https://www.youtube.com/@RasaHQ)
-
-If you modify any of the rasa files you will need to retrain the assistant, you can do it with `make rasa-train`
-
-**Disclaimer :** this bot is not complete yet. It is doing what makes reminderbot example. I am still in the learning path of rasa and NLP. 
-
 ## Communication Channels
 
 You can communicate with your chatbot assistant via two channels.
@@ -79,6 +68,7 @@ The docker-compose file alreay deploys it, but if you want to develop on it loca
 RASA_URL=http://localhost:5005
 CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
 WHISPER_ASR_URL=http://host.docker.internal:9000 #if you are using it
+ANTHROPIC_URL=http://host.docker.internal:8000/chat #if you are using anthropic
 ```
 
 2. Set the envars with `export $(cat ./.env | xargs)`
@@ -94,7 +84,7 @@ WHISPER_ASR_URL=http://host.docker.internal:9000 #if you are using it
 4. Run `make run-local-audio`
 
 
-## Whatsapp channel
+### Whatsapp channel
 
 Same variables than audio bot are needed, just change the make command `make run-local-whatsapp`
 
@@ -103,10 +93,17 @@ If you can't scan the QR code you can also link the whatsapp account using a pai
 
 Once you pair your whatsapp account the session will be stored in a sqlite file. This file is created inside the container but mapped through a docker volume, so you can use it when you want to develop locally. If you delete this file you will have to login again using a new QR code.
 
-### Features
+#### Features
 
 Now the code is prepared to receive text or voice messages.
 The assistant on this repository is a `reminderbot` that will send you reminders based on messages that you are sending to it 
+
+## Assistants
+
+Currently the channels are integrated with two LLM/NLU assistants.
+
+* [RASA](./rasa/README.md)
+* [Anthropic](./anthropic/README.md)
 
 # Gratitude and Thanks
 

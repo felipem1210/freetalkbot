@@ -36,9 +36,9 @@ endif
 
 
 build:
-	COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 $(CONTAINER_CLI) compose build
+	COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 $(CONTAINER_CLI) compose --profile=whisper-asr build
 
-run:
+run-rasa:
 	$(CONTAINER_CLI) compose up -d
 
 run-whisper-asr:

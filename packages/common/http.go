@@ -20,15 +20,12 @@ type PostHttpReq struct {
 	FilePath      string
 }
 
-type RasaResponse struct {
+type Response struct {
 	RecipientId string `json:"recipient_id"`
 	Text        string `json:"text"`
-	//Image       string `json:"image"`
 }
 
-type Response struct {
-	RasaResponse []RasaResponse
-}
+type Responses []Response
 
 func (r *PostHttpReq) SendPost(ct string) (io.ReadCloser, error) {
 	var requestBody bytes.Buffer
@@ -90,10 +87,6 @@ func (r *PostHttpReq) SendPost(ct string) (io.ReadCloser, error) {
 		req.Header.Set(key, value)
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-
 	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -127,25 +120,22 @@ func ProcessResponseString(respBody io.ReadCloser) (string, error) {
 }
 
 // // processJSONResponse reads and processes the JSON body of an HTTP response.
-func (r Response) ProcessJSONResponse(respBody io.ReadCloser) (Response, error) {
+func (r Responses) ProcessJSONResponse(respBody io.ReadCloser) (Responses, error) {
 	//at := os.Getenv("ASSISTANT_TOOL")
-	at := "rasa"
 	// Ensure the response body is closed after reading
 	defer respBody.Close()
 
 	if respBody == nil {
 		return r, fmt.Errorf("received a nil response body")
 	}
+
 	// Read the body
 	bodyBytes, err := io.ReadAll(respBody)
 	if err != nil {
 		return r, fmt.Errorf("error reading response body: %w", err)
 	}
 
-	switch at {
-	case "rasa":
-		err = json.Unmarshal(bodyBytes, &r.RasaResponse)
-	}
+	err = json.Unmarshal(bodyBytes, &r)
 
 	if err != nil {
 		return r, fmt.Errorf("error unmarshaling JSON: %w", err)

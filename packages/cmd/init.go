@@ -18,12 +18,19 @@ var prCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		comChan, _ := cmd.Flags().GetString("communication-channel")
 		common.SetLogger(os.Getenv("LOG_LEVEL"))
-		validateEnv([]string{"RASA_URL", "ASSISTANT_LANGUAGE", "STT_TOOL"})
+		validateEnv([]string{"STT_TOOL", "ASSISTANT_TOOL"})
 		switch os.Getenv("STT_TOOL") {
 		case "whisper-asr":
 			validateEnv([]string{"WHISPER_ASR_URL"})
 		case "whisper":
 			validateEnv([]string{"OPENAI_TOKEN"})
+		}
+
+		switch os.Getenv("ASSISTANT_TOOL") {
+		case "rasa":
+			validateEnv([]string{"RASA_URL", "ASSISTANT_LANGUAGE", "CALLBACK_SERVER_URL", "RASA_ACTIONS_SERVER_URL"})
+		case "anthropic":
+			validateEnv([]string{"ANTHROPIC_TOKEN", "ANTHROPIC_URL"})
 		}
 		if comChan == "audio" {
 			audiosocketserver.InitializeServer()

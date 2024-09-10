@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	gt "github.com/bas24/googletranslatefree"
+	"github.com/felipem1210/freetalkbot/packages/anthropic"
 	"github.com/felipem1210/freetalkbot/packages/common"
 	"github.com/felipem1210/freetalkbot/packages/rasa"
 	_ "github.com/mattn/go-sqlite3"
@@ -61,31 +62,44 @@ func handleMessageEvent(v *events.Message) {
 	}
 	slog.Debug(fmt.Sprintf("message received: %s", messageBody), "jid", jid)
 
-	language = common.DetectLanguage(messageBody)
-	slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
+	switch os.Getenv("ASSISTANT_TOOL") {
+	case "anthropic":
+		anthropicHandler := anthropic.Anthropic{}
+		anthropicHandler.Request.JsonBody = map[string]string{"sender": jid, "text": messageBody}
+		response, err := anthropicHandler.Interact()
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error interacting with anthropic: %s", err), "jid", jid)
+			return
+		}
+		slog.Debug(fmt.Sprintf("response from anthropic: %v", response), "jid", jid)
+		handleResponses(response)
+	case "rasa":
+		language = common.DetectLanguage(messageBody)
+		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
 
-	if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-		messageBody, _ = gt.Translate(messageBody, language, assistantLanguage)
-		slog.Debug(fmt.Sprintf("translated message: %s", messageBody), "jid", jid)
-	}
+		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
+			messageBody, _ = gt.Translate(messageBody, language, assistantLanguage)
+			slog.Debug(fmt.Sprintf("translated message: %s", messageBody), "jid", jid)
+		}
 
-	rasaHandler := rasa.Rasa{
-		MessageLanguage: language,
-		RasaLanguage:    assistantLanguage,
-	}
+		rasaHandler := rasa.Rasa{
+			MessageLanguage: language,
+			RasaLanguage:    assistantLanguage,
+		}
 
-	rasaHandler.Request.JsonBody = map[string]string{"sender": jid, "message": messageBody}
-	response, err := rasaHandler.Interact()
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "jid", jid)
-		return
+		rasaHandler.Request.JsonBody = map[string]string{"sender": jid, "message": messageBody}
+		response, err := rasaHandler.Interact()
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "jid", jid)
+			return
+		}
+		slog.Debug(fmt.Sprintf("response from rasa: %v", response), "jid", jid)
+		handleResponses(response)
 	}
-	slog.Debug(fmt.Sprintf("response from rasa: %v", response), "jid", jid)
-	handleResponses(response)
 }
 
-func handleResponses(response common.Response) {
-	for _, r := range response.RasaResponse {
+func handleResponses(responses common.Responses) {
+	for _, r := range responses {
 		result, error := sendWhatsappMessage(r.RecipientId, r.Text)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error sending response: %s", error), "jid", jid)

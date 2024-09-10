@@ -180,7 +180,8 @@ func Handle(pCtx context.Context, c net.Conn) {
 
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			picoTtsLanguage := choosePicoTtsLanguage(language)
-			for _, response := range responses.RasaResponse {
+
+			for _, response := range responses {
 				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
 					response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
 				}
