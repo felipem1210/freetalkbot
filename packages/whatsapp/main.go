@@ -62,17 +62,17 @@ func handleMessageEvent(v *events.Message) {
 	}
 	slog.Debug(fmt.Sprintf("message received: %s", messageBody), "jid", jid)
 
+	var response common.Responses
 	switch os.Getenv("ASSISTANT_TOOL") {
 	case "anthropic":
 		anthropicHandler := anthropic.Anthropic{}
 		anthropicHandler.Request.JsonBody = map[string]string{"sender": jid, "text": messageBody}
-		response, err := anthropicHandler.Interact()
+		response, err = anthropicHandler.Interact()
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error interacting with anthropic: %s", err), "jid", jid)
 			return
 		}
-		slog.Debug(fmt.Sprintf("response from anthropic: %v", response), "jid", jid)
-		handleResponses(response)
+
 	case "rasa":
 		language = common.DetectLanguage(messageBody)
 		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
@@ -88,14 +88,14 @@ func handleMessageEvent(v *events.Message) {
 		}
 
 		rasaHandler.Request.JsonBody = map[string]string{"sender": jid, "message": messageBody}
-		response, err := rasaHandler.Interact()
+		response, err = rasaHandler.Interact()
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "jid", jid)
 			return
 		}
-		slog.Debug(fmt.Sprintf("response from rasa: %v", response), "jid", jid)
-		handleResponses(response)
 	}
+	slog.Debug(fmt.Sprintf("response from %v: %v", os.Getenv("ASSISTANT_TOOL"), response), "jid", jid)
+	handleResponses(response)
 }
 
 func handleResponses(responses common.Responses) {

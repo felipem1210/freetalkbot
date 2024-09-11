@@ -17,6 +17,7 @@ import (
 	gt "github.com/bas24/googletranslatefree"
 
 	"github.com/CyCoreSystems/audiosocket"
+	"github.com/felipem1210/freetalkbot/packages/anthropic"
 	"github.com/felipem1210/freetalkbot/packages/common"
 	"github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/go-audio/audio"
@@ -165,18 +166,40 @@ func Handle(pCtx context.Context, c net.Conn) {
 
 			go deleteFile(inputAudioFile)
 
-			rasaHandler := rasa.Rasa{
-				MessageLanguage: language,
-				RasaLanguage:    assistantLanguage,
-			}
+			var responses common.Responses
+			jsonBody := map[string]string{"sender": id.String(), "text": transcription}
+			switch os.Getenv("ASSISTANT_TOOL") {
+			case "anthropic":
+				anthropicHandler := anthropic.Anthropic{}
+				anthropicHandler.Request.JsonBody = jsonBody
+				responses, err = anthropicHandler.Interact()
+				if err != nil {
+					slog.Error(fmt.Sprintf("Error interacting with anthropic: %s", err), "callId", id.String())
+					return
+				}
 
-			rasaHandler.Request.JsonBody = map[string]string{"sender": id.String(), "message": transcription}
-			responses, err := rasaHandler.Interact()
-			if err != nil {
-				slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "callId", id.String())
-				return
+			case "rasa":
+				language = common.DetectLanguage(transcription)
+				slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
+
+				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
+					transcription, _ = gt.Translate(transcription, language, assistantLanguage)
+					slog.Debug(fmt.Sprintf("translated message: %s", transcription), "callId", id.String())
+				}
+
+				rasaHandler := rasa.Rasa{
+					MessageLanguage: language,
+					RasaLanguage:    assistantLanguage,
+				}
+
+				rasaHandler.Request.JsonBody = jsonBody
+				responses, err = rasaHandler.Interact()
+				if err != nil {
+					slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "callId", id.String())
+					return
+				}
 			}
-			slog.Debug(fmt.Sprintf("response received: %s", responses), "callId", id.String())
+			slog.Debug(fmt.Sprintf("response from %v: %v", os.Getenv("ASSISTANT_TOOL"), responses), "callId", id.String())
 
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			picoTtsLanguage := choosePicoTtsLanguage(language)
@@ -202,8 +225,8 @@ func Handle(pCtx context.Context, c net.Conn) {
 				} else {
 					slog.Debug(fmt.Sprintf("audio data generated from response: %s", response.Text), "callId", id.String())
 				}
-				go deleteFile(responseAudioFile)
 				slog.Debug(fmt.Sprintf("completed to create the response in %s", time.Since(start).Round(time.Second).String()), "callId", id.String())
+				go deleteFile(responseAudioFile)
 				sendAudio(c, audioData)
 			}
 		}
