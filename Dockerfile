@@ -49,7 +49,7 @@ RUN addgroup -g 1001 freetalkbot && \
 WORKDIR /app/
 
 # Create necessary folders
-RUN mkdir /app/audios
+RUN mkdir -p /app/data/audios
 
 # Copy binaries from the build stage
 COPY --from=builder /freetalkbot /usr/local/bin/freetalkbot

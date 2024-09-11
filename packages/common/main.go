@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	AudioDir     = "audios/"
+	DataDir      = "data/"
+	AudioDir     = DataDir + "audios/"
 	AudioEncPath = AudioDir + "audio.enc"
 )
 

@@ -141,10 +141,10 @@ func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string
 }
 
 func InitializeServer() {
-	sqlDbFileName := os.Getenv("SQL_DB_FILE_NAME")
+	sqlDbFilePath := common.DataDir + os.Getenv("SQL_DB_FILE_NAME")
 	dbLog := waLog.Stdout("Database", "INFO", true)
 
-	container, err := sqlstore.New("sqlite3", "file:"+sqlDbFileName+"?_foreign_keys=on", dbLog)
+	container, err := sqlstore.New("sqlite3", "file:"+sqlDbFilePath+"?_foreign_keys=on", dbLog)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Failed to initialize SQL store: %v", err))
 		os.Exit(1)

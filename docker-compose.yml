@@ -53,7 +53,7 @@ services:
     env_file:
       - .env
     volumes:
-      - app_data:/app/
+      - ./data:/app/data
 
   gobot_whatsapp:
     build:
@@ -68,7 +68,7 @@ services:
     env_file:
       - .env
     volumes:
-      - app_data:/app/
+      - ./data:/app/data
 
   rasa:
     build:
