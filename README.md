@@ -19,11 +19,21 @@ For better golang developer experience you can install [golang-air](https://gith
 ### Environment variables
 
 Check the variables in `env.example` file. Create `.env` file with `cp -a .env.example .env` and modify it with your values. 
-All bot servers and Rasa assistant reads configuration from this file. 
+Read carefully the file to know which variables are relevant for each component
+
+## Run
+
+You can pull the docker image and run it with the environment variables set up. Choose your communication channel between whatsapp or audio
+
+```sh
+docker pull ghcr.io/felipem1210/freetalkbot/freetalkbot:latest
+COM_CHANNEL=audio #or whatsapp
+ocker run -it --rm --env-file ./.env ghcr.io/felipem1210/freetalkbot/freetalkbot:latest freetalkbot init -c $COM_CHANNEL
+```
 
 ## Development
 
-The components added in the `docker-compose.yml` file are:
+For local development you can use docker or podman to raise up the components defined in the `docker-compose.yml` file. These components are:
 
 * Asterisk
 * Anthropic
@@ -35,9 +45,11 @@ The components added in the `docker-compose.yml` file are:
 
 ### Build docker images
 
-Run `make build`
+Run `make build`. This will build locally all the images needed for components
 
 ### Run the solution
+
+After setting up properly the environment variables:
 
 * Without whisper-asr: `make run`
 * With whisper-asr: `make run-whisper-asr`
