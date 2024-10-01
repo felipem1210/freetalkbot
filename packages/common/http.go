@@ -121,7 +121,6 @@ func ProcessResponseString(respBody io.ReadCloser) (string, error) {
 
 // // processJSONResponse reads and processes the JSON body of an HTTP response.
 func (r Responses) ProcessJSONResponse(respBody io.ReadCloser) (Responses, error) {
-	//at := os.Getenv("ASSISTANT_TOOL")
 	// Ensure the response body is closed after reading
 	defer respBody.Close()
 

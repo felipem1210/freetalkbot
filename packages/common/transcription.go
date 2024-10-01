@@ -29,14 +29,14 @@ func openaiTranscribeAudio(c *openai.Client, audioPath string) (string, error) {
 	return resp.Text, nil
 }
 
-func whisperAsrTranscribeAudio(audioFilePath string) (string, error) {
+func whisperLocalTranscribeAudio(audioFilePath string) (string, error) {
 	request := &PostHttpReq{
-		Url: fmt.Sprintf("%s/%s", os.Getenv("WHISPER_ASR_URL"), "asr"),
+		Url: fmt.Sprintf("%s/%s", os.Getenv("OPENAI_BASE_URL"), "audio/transcriptions"),
 		FormParams: map[string]string{
-			"output":   "text",
-			"language": "es",
+			"stream": "true",
+			"model":  "Systran/faster-distil-whisper-large-v3",
 		},
-		FileParamName: "audio_file",
+		FileParamName: "file",
 		FilePath:      audioFilePath,
 	}
 	resp, err := request.SendPost("form-data")

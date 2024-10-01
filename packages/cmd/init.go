@@ -20,10 +20,13 @@ var prCmd = &cobra.Command{
 		common.SetLogger(os.Getenv("LOG_LEVEL"))
 		validateEnv([]string{"STT_TOOL", "ASSISTANT_TOOL"})
 		switch os.Getenv("STT_TOOL") {
-		case "whisper-asr":
-			validateEnv([]string{"WHISPER_ASR_URL"})
+		case "whisper-local":
+			validateEnv([]string{"OPENAI_BASE_URL"})
 		case "whisper":
 			validateEnv([]string{"OPENAI_TOKEN"})
+		default:
+			fmt.Println("Invalid value for variable STT_TOOL, valid values are whisper-local and whisper")
+			os.Exit(1)
 		}
 
 		switch os.Getenv("ASSISTANT_TOOL") {

@@ -36,7 +36,8 @@ func TranscribeAudio(audioFilePath string, openaiClient *openai.Client) (string,
 	sttTool := os.Getenv("STT_TOOL")
 	switch sttTool {
 	case "whisper-local":
-		transcription, err = whisperAsrTranscribeAudio(audioFilePath)
+		fmt.Println("Transcribing audio using whisper-local")
+		transcription, err = whisperLocalTranscribeAudio(audioFilePath)
 	case "whisper":
 		transcription, err = openaiTranscribeAudio(openaiClient, audioFilePath)
 	}
