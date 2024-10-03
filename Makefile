@@ -40,21 +40,15 @@ build:
 run:
 	$(CONTAINER_CLI) compose up -d
 
-run-whisper-asr:
-	$(CONTAINER_CLI) compose --profile whisper-asr up -d
+run-local-whisper-cpu:
+	$(CONTAINER_CLI) compose --profile cpu  up -d
 
-run-local-audio:
-	$(CONTAINER_CLI) compose down
-	$(CONTAINER_CLI) compose up -d
-	$(CONTAINER_CLI) compose stop gobot_voip
-	air -- init -c audio
-
-run-local-whatsapp:
-	$(CONTAINER_CLI) compose down
-	$(CONTAINER_CLI) compose up -d
-	$(CONTAINER_CLI) compose stop gobot_whatsapp
-	air -- init -c whatsapp
+run-local-whisper-gpu:
+	$(CONTAINER_CLI) compose --profile gpu  up -d
 
 rasa-train:
 	$(CONTAINER_CLI) compose exec rasa rasa train
 	$(CONTAINER_CLI) compose restart rasa
+
+destroy:
+	$(CONTAINER_CLI) compose --profile cpu --profile gpu down 

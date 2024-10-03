@@ -21,7 +21,7 @@ var prCmd = &cobra.Command{
 		validateEnv([]string{"STT_TOOL", "ASSISTANT_TOOL"})
 		switch os.Getenv("STT_TOOL") {
 		case "whisper-local":
-			validateEnv([]string{"OPENAI_BASE_URL"})
+			validateEnv([]string{"WHISPER_LOCAL_URL"})
 		case "whisper":
 			validateEnv([]string{"OPENAI_TOKEN"})
 		default:
@@ -34,7 +34,11 @@ var prCmd = &cobra.Command{
 			validateEnv([]string{"RASA_URL", "ASSISTANT_LANGUAGE", "CALLBACK_SERVER_URL", "RASA_ACTIONS_SERVER_URL"})
 		case "anthropic":
 			validateEnv([]string{"ANTHROPIC_TOKEN", "ANTHROPIC_URL"})
+		default:
+			fmt.Println("Invalid value for variable ASSISTANT_TOOL, valid values are rasa and anthropic")
+			os.Exit(1)
 		}
+
 		if comChan == "audio" {
 			audiosocketserver.InitializeServer()
 		} else if comChan == "whatsapp" {

@@ -14,8 +14,6 @@ Implementation of communication channels to interact with LLM/NLU bot assistants
 
 Install go dependencies with `go mod tidy`. Run it as well if you add a new package
 
-For better golang developer experience you can install [golang-air](https://github.com/cosmtrek/air)
-
 ### Environment variables
 
 Check the variables in `env.example` file. Create `.env` file with `cp -a .env.example .env` and modify it with your values. 
@@ -45,14 +43,15 @@ For local development you can use docker or podman to raise up the components de
 
 ### Build docker images
 
-Run `make build`. This will build locally all the images needed for components
+Run `make build`. This will build locally all the images needed for components.
 
 ### Run the solution
 
 After setting up properly the environment variables:
 
 * Without whisper-asr: `make run`
-* With whisper-asr: `make run-whisper-asr`
+* With whisper-local using cpu: `make run-local-whisper-cpu`
+* With whisper-local using gpu: `make run-local-whisper-gpu`
 
 ### Configure asterisk
 
@@ -70,31 +69,9 @@ Asterisk is raised up in network_mode brige. The asterisk configuration files ar
 
 You can communicate with your chatbot assistant via two channels.
 
-### Audio channel
+### Voice channel
 
-The docker-compose file alreay deploys it, but if you want to develop on it locally instead in the docker container:
-
-1. Change envars in `.env` file:
-
-```sh
-RASA_URL=http://localhost:5005
-CALLBACK_SERVER_URL=http://host.docker.internal:5034/bot
-WHISPER_ASR_URL=http://host.docker.internal:9000 #if you are using it
-ANTHROPIC_URL=http://host.docker.internal:8000/chat #if you are using anthropic
-```
-
-2. Set the envars with `export $(cat ./.env | xargs)`
-
-3. Install `pkg-config`: `brew install pkg-config`
-
-3. Change the audiosocket server host in `asterisk/container-config/extensions_local.conf`
-
-```sh
- same = n,AudioSocket(40325ec2-5efd-4bd3-805f-53576e581d13,host.docker.internal:8080)
-```
-
-4. Run `make run-local-audio`
-
+Audiosocket server implementation, receives a request from Asterisk.
 
 ### Whatsapp channel
 
@@ -120,4 +97,4 @@ The following projects inspired to the construction of this one:
 
 * [audiosocket](https://github.com/CyCoreSystems/audiosocket)
 * [whatsmeow-quickstart](https://github.com/codespearhead/whatsmeow-quickstart)
-* [Whisper ASR webservice](https://github.com/ahmetoner/whisper-asr-webservice)
+* [faster-whisper-server](https://github.com/fedirz/faster-whisper-server)

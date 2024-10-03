@@ -27,6 +27,10 @@ services:
   whisper_cpu:
     image: fedirz/faster-whisper-server:latest-cpu
     restart: unless-stopped
+    profiles:
+      - cpu
+    env_file:
+      - .env
     ports:
       - 8000:8000
     networks: 
@@ -34,22 +38,19 @@ services:
     volumes:
       - hugging_face_cache:/root/.cache/huggingface
 
-  # whisper:
-  #   profiles:
-  #     - whisper-asr
-  #   image: onerahmet/openai-whisper-asr-webservice:latest
-  #   platform: linux/amd64
-  #   networks: 
-  #     - freetalkbot
-  #   ports:
-  #     - "9000:9000"
-  #   environment:
-  #     - ASR_MODEL=base
-  #     - ASR_ENGINE=faster_whisper
-  #   env_file:
-  #     - .env
-  #   volumes:
-  #     - asr_model:/root/.cache/whisper
+  whisper_gpu:
+    image: fedirz/faster-whisper-server:latest-cuda
+    restart: unless-stopped
+    profiles:
+      - gpu
+    env_file:
+      - .env
+    ports:
+      - 8000:8000
+    networks: 
+      - freetalkbot
+    volumes:
+      - hugging_face_cache:/root/.cache/huggingface
     
   gobot_voip:
     build:

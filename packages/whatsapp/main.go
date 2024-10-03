@@ -134,7 +134,10 @@ func transcribeAudio(audioMessage *waE2E.AudioMessage, messageId string) (string
 		return "", err
 	}
 
-	transcription, err = common.TranscribeAudio(audioFilePath, openaiClient)
+	transcription, err = common.TranscribeAudio(audioFilePath, nil, openaiClient)
+	if err != nil {
+		return "", err
+	}
 	slog.Debug(fmt.Sprintf("transcription: %s", transcription), "jid", jid)
 
 	return transcription, nil
