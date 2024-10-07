@@ -222,6 +222,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking 
 	var silenceStart time.Time
 	var messageData []byte
 	detectingSilence := false
+	userBeginSpeaking := false
 
 	for {
 		m, err := audiosocket.NextMessage(c)
@@ -252,18 +253,22 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking 
 			} else {
 				volume = calculateVolumePCM16(m.Payload())
 			}
+			fmt.Printf("Volume: %f\n", volume)
 			if volume < silenceThreshold {
-				if !detectingSilence {
-					silenceStart = time.Now()
-					detectingSilence = true
-				} else if time.Since(silenceStart) >= silenceDuration {
-					slog.Debug("Detected silence", "callId", id.String())
-					userEndSpeaking <- true
-					audioDataCh <- messageData
-					return
+				if userBeginSpeaking {
+					if !detectingSilence {
+						silenceStart = time.Now()
+						detectingSilence = true
+					} else if time.Since(silenceStart) >= silenceDuration {
+						slog.Debug("Detected silence", "callId", id.String())
+						userEndSpeaking <- true
+						audioDataCh <- messageData
+						return
+					}
 				}
 			} else {
 				detectingSilence = false
+				userBeginSpeaking = true
 			}
 		}
 	}
