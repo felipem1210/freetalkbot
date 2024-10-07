@@ -83,11 +83,11 @@ services:
 
   rasa:
     build:
-      context: ./rasa
+      context: ./assistants/rasa
     env_file:
       - .env
     volumes:
-      - ./rasa:/app
+      - ./assistants/rasa:/app
     command: 
       - run
       - --enable-api 
@@ -103,7 +103,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./rasa:/app
+      - ./assistants/rasa:/app
     command: 
       - run 
       - actions
@@ -114,7 +114,7 @@ services:
 
   anthropic:
     build:
-      context: ./anthropic
+      context: ./assistants/anthropic
     env_file:
       - .env
     ports:
@@ -125,7 +125,6 @@ services:
 volumes:
   asterisk-conf:
   app_data:
-  asr_model:
   hugging_face_cache:
 
 networks:

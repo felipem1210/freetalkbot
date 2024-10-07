@@ -7,13 +7,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
-	gt "github.com/bas24/googletranslatefree"
-	"github.com/felipem1210/freetalkbot/packages/anthropic"
+	"github.com/felipem1210/freetalkbot/packages/assistants"
 	"github.com/felipem1210/freetalkbot/packages/common"
-	"github.com/felipem1210/freetalkbot/packages/rasa"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
@@ -26,13 +23,12 @@ import (
 )
 
 var (
-	whatsappClient    *whatsmeow.Client
-	openaiClient      common.OpenaiClient
-	language          string
-	assistantLanguage string
-	transcription     string
-	jid               string
-	err               error
+	whatsappClient *whatsmeow.Client
+	openaiClient   common.OpenaiClient
+	language       string
+	transcription  string
+	jid            string
+	err            error
 )
 
 func getEventHandler() func(interface{}) {
@@ -47,7 +43,6 @@ func getEventHandler() func(interface{}) {
 func handleMessageEvent(v *events.Message) {
 	messageBody := v.Message.GetConversation()
 	jid = parseJid(v.Info.Sender.String())
-	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
 
 	if messageBody != "" {
 		slog.Info("Received text message", "jid", jid)
@@ -62,40 +57,17 @@ func handleMessageEvent(v *events.Message) {
 	}
 	slog.Debug(fmt.Sprintf("message received: %s", messageBody), "jid", jid)
 
-	var response common.Responses
-	switch os.Getenv("ASSISTANT_TOOL") {
-	case "anthropic":
-		anthropicHandler := anthropic.Anthropic{}
-		anthropicHandler.Request.JsonBody = map[string]string{"sender": jid, "text": messageBody}
-		response, err = anthropicHandler.Interact()
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error interacting with anthropic: %s", err), "jid", jid)
-			return
-		}
+	language = common.DetectLanguage(messageBody)
+	slog.Debug(fmt.Sprintf("detected language: %s", language), "sender", jid)
 
-	case "rasa":
-		language = common.DetectLanguage(messageBody)
-		slog.Debug(fmt.Sprintf("detected language: %s", language), "jid", jid)
-
-		if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-			messageBody, _ = gt.Translate(messageBody, language, assistantLanguage)
-			slog.Debug(fmt.Sprintf("translated message: %s", messageBody), "jid", jid)
-		}
-
-		rasaHandler := rasa.Rasa{
-			MessageLanguage: language,
-			RasaLanguage:    assistantLanguage,
-		}
-
-		rasaHandler.Request.JsonBody = map[string]string{"sender": jid, "message": messageBody}
-		response, err = rasaHandler.Interact()
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "jid", jid)
-			return
-		}
+	responses, err := assistants.HandleAssistant(language, jid, messageBody)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error receiving response from assistant %s: %s", os.Getenv("ASSISTANT_TOOL"), err), "jid", jid)
+		return
 	}
-	slog.Debug(fmt.Sprintf("response from %v: %v", os.Getenv("ASSISTANT_TOOL"), response), "jid", jid)
-	handleResponses(response)
+
+	slog.Debug(fmt.Sprintf("response from %v: %v", os.Getenv("ASSISTANT_TOOL"), responses), "jid", jid)
+	handleResponses(responses)
 }
 
 func handleResponses(responses common.Responses) {

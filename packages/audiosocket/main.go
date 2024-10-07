@@ -11,15 +11,11 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
-	gt "github.com/bas24/googletranslatefree"
-
 	"github.com/CyCoreSystems/audiosocket"
-	"github.com/felipem1210/freetalkbot/packages/anthropic"
+	"github.com/felipem1210/freetalkbot/packages/assistants"
 	"github.com/felipem1210/freetalkbot/packages/common"
-	"github.com/felipem1210/freetalkbot/packages/rasa"
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/gofrs/uuid"
@@ -161,49 +157,23 @@ func Handle(pCtx context.Context, c net.Conn) {
 				go deleteFile(inputAudioFile)
 			}
 
-			var responses common.Responses
-			jsonBody := map[string]string{"sender": id.String(), "text": transcription}
-			switch os.Getenv("ASSISTANT_TOOL") {
-			case "anthropic":
-				anthropicHandler := anthropic.Anthropic{}
-				anthropicHandler.Request.JsonBody = jsonBody
-				responses, err = anthropicHandler.Interact()
-				if err != nil {
-					slog.Error(fmt.Sprintf("Error interacting with anthropic: %s", err), "callId", id.String())
-					return
-				}
-
-			case "rasa":
+			if language == "" && os.Getenv("ASSISTANT_TOOL") == "rasa" {
 				language = common.DetectLanguage(transcription)
-				slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
-
-				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-					transcription, _ = gt.Translate(transcription, language, assistantLanguage)
-					slog.Debug(fmt.Sprintf("translated message: %s", transcription), "callId", id.String())
-				}
-
-				rasaHandler := rasa.Rasa{
-					MessageLanguage: language,
-					RasaLanguage:    assistantLanguage,
-				}
-
-				rasaHandler.Request.JsonBody = jsonBody
-				responses, err = rasaHandler.Interact()
-				if err != nil {
-					slog.Error(fmt.Sprintf("Error interacting with Rasa: %s", err), "callId", id.String())
-					return
-				}
+				slog.Debug(fmt.Sprintf("detected language: %s", language), "sender", id.String())
 			}
+
+			responses, err := assistants.HandleAssistant(language, id.String(), transcription)
+			if err != nil {
+				slog.Error(fmt.Sprintf("Error receiving response from assistant %s: %s", os.Getenv("ASSISTANT_TOOL"), err), "jid", id.String())
+				return
+			}
+
 			slog.Debug(fmt.Sprintf("response from %v: %v", os.Getenv("ASSISTANT_TOOL"), responses), "callId", id.String())
 
 			responseAudioFile := fmt.Sprintf("%s/result-%s.wav", common.AudioDir, strconv.Itoa(i))
 			picoTtsLanguage := choosePicoTtsLanguage(language)
 
 			for _, response := range responses {
-				if !strings.Contains(language, assistantLanguage) && assistantLanguage != language {
-					response.Text, _ = gt.Translate(response.Text, assistantLanguage, language)
-				}
-
 				picoTtsCmd := fmt.Sprintf("pico2wave -l %s -w %s \"%s\"", picoTtsLanguage, responseAudioFile, response.Text)
 				slog.Debug(fmt.Sprintf("command to generate audio: %s", picoTtsCmd), "callId", id.String())
 				err := common.ExecuteCommand(picoTtsCmd)
