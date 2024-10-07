@@ -1,12 +1,9 @@
 package common
 
 import (
-	"fmt"
-	"os"
 	"strings"
 
 	lingua "github.com/pemistahl/lingua-go"
-	"github.com/sashabaranov/go-openai"
 )
 
 func DetectLanguage(text string) string {
@@ -28,20 +25,4 @@ func DetectLanguage(text string) string {
 	} else {
 		return "none"
 	}
-}
-
-func TranscribeAudio(audioFilePath string, openaiClient *openai.Client) (string, error) {
-	var transcription string
-	var err error
-	sttTool := os.Getenv("STT_TOOL")
-	switch sttTool {
-	case "whisper-local":
-		transcription, err = whisperAsrTranscribeAudio(audioFilePath)
-	case "whisper":
-		transcription, err = openaiTranscribeAudio(openaiClient, audioFilePath)
-	}
-	if err != nil {
-		return "", fmt.Errorf("failed to transcribe audio: %v", err)
-	}
-	return transcription, nil
 }

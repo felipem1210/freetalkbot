@@ -24,22 +24,33 @@ services:
       - ./pulse:/run/pulse:rshared          # Use host audio
       - /etc/localtime:/etc/localtime:ro    # Use host timezone    
 
-  whisper:
+  whisper_cpu:
+    image: fedirz/faster-whisper-server:latest-cpu
+    restart: unless-stopped
     profiles:
-      - whisper-asr
-    image: onerahmet/openai-whisper-asr-webservice:latest
-    platform: linux/amd64
-    networks: 
-      - freetalkbot
-    ports:
-      - "9000:9000"
-    environment:
-      - ASR_MODEL=base
-      - ASR_ENGINE=faster_whisper
+      - cpu
     env_file:
       - .env
+    ports:
+      - 8000:8000
+    networks: 
+      - freetalkbot
     volumes:
-      - asr_model:/root/.cache/whisper
+      - hugging_face_cache:/root/.cache/huggingface
+
+  whisper_gpu:
+    image: fedirz/faster-whisper-server:latest-cuda
+    restart: unless-stopped
+    profiles:
+      - gpu
+    env_file:
+      - .env
+    ports:
+      - 8000:8000
+    networks: 
+      - freetalkbot
+    volumes:
+      - hugging_face_cache:/root/.cache/huggingface
     
   gobot_voip:
     build:
@@ -107,7 +118,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      - "8088:8088"
     networks:
       - freetalkbot
 
@@ -115,6 +126,7 @@ volumes:
   asterisk-conf:
   app_data:
   asr_model:
+  hugging_face_cache:
 
 networks:
   freetalkbot:

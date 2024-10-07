@@ -52,12 +52,8 @@ var (
 	cancel            context.CancelFunc
 	assistantLanguage string
 	language          string
+	openaiClient      common.OpenaiClient
 )
-
-var openaiClient common.OpenaiClient
-
-func init() {
-}
 
 // ErrHangup indicates that the call should be terminated or has been terminated
 var ErrHangup = errors.New("Hangup")
@@ -87,6 +83,7 @@ func listen(ctx context.Context) error {
 			slog.Error("failed to accept new connection:", "error", err)
 			continue
 		}
+
 		go Handle(ctx, conn)
 	}
 }
@@ -140,14 +137,19 @@ func Handle(pCtx context.Context, c net.Conn) {
 			start := time.Now()
 			slog.Debug("sending audio to audiosocket channel", "callId", id.String())
 			inputAudioFile := fmt.Sprintf("%s/output-%s.wav", common.AudioDir, strconv.Itoa(i))
-			err := saveToWAV(audioData, inputAudioFile)
-			if err != nil {
-				return
+
+			if os.Getenv("STT_TOOL") == "whisper" {
+				err := saveToWAV(audioData, inputAudioFile)
+				if err != nil {
+					return
+				} else {
+					slog.Debug("generated audio wav file", "callId", id.String())
+				}
+				transcription, err = common.TranscribeAudio(inputAudioFile, nil, openaiClient)
 			} else {
-				slog.Debug("generated audio wav file", "callId", id.String())
+				transcription, err = common.TranscribeAudio("", audioData, openaiClient)
 			}
 
-			transcription, err = common.TranscribeAudio(inputAudioFile, openaiClient)
 			if err != nil {
 				slog.Error(fmt.Sprintf("failed to transcribe audio: %v", err), "callId", id.String())
 				return
@@ -155,16 +157,9 @@ func Handle(pCtx context.Context, c net.Conn) {
 				slog.Debug(fmt.Sprintf("transcription generated: %s", transcription), "callId", id.String())
 			}
 
-			if language == "" {
-				language = common.DetectLanguage(transcription)
-				slog.Debug(fmt.Sprintf("detected language: %s", language), "callId", id.String())
+			if os.Getenv("STT_TOOL") == "whisper" {
+				go deleteFile(inputAudioFile)
 			}
-
-			if assistantLanguage != language {
-				transcription, _ = gt.Translate(transcription, language, assistantLanguage)
-			}
-
-			go deleteFile(inputAudioFile)
 
 			var responses common.Responses
 			jsonBody := map[string]string{"sender": id.String(), "text": transcription}
