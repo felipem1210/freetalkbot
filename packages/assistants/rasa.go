@@ -1,4 +1,4 @@
-package rasa
+package assistants
 
 import (
 	"fmt"

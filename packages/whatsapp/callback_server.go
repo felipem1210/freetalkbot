@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	gt "github.com/bas24/googletranslatefree"
@@ -11,7 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var assistantLanguage string
+
 func InitializeCallbackServer() {
+	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.POST("/bot", handleBotEndpoint)

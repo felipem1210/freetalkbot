@@ -27,9 +27,9 @@ tmp
 .env
 .*.drawio.bkp
 data/audios/*
-rasa/.*
-rasa/pip
-rasa/actions/__pycache__/
-rasa/models/
+assistants/rasa/.*
+assistants/rasa/pip
+assistants/rasa/actions/__pycache__/
+assistants/rasa/models/
 **/__pycache__/
 **/.ipynb_checkpoints
