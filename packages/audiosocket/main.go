@@ -1,9 +1,7 @@
 package audiosocketserver
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -16,11 +14,8 @@ import (
 	"github.com/CyCoreSystems/audiosocket"
 	"github.com/felipem1210/freetalkbot/packages/assistants"
 	"github.com/felipem1210/freetalkbot/packages/common"
-	"github.com/go-audio/audio"
-	"github.com/go-audio/wav"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/zaf/resample"
 )
 
 const (
@@ -36,19 +31,18 @@ const (
 	slinChunkSize = 320 // 8000Hz * 20ms * 2 bytes
 
 	silenceThreshold = 500             // Silence threshold
-	silenceDuration  = 3 * time.Second // Minimum duration of silence
+	silenceDuration  = 2 * time.Second // Minimum duration of silence
 	MaxCallDuration  = 2 * time.Minute //  MaxCallDuration is the maximum amount of time to allow a call to be up before it is terminated.
 )
 
 var (
-	audioData         []byte
-	id                uuid.UUID
-	err               error
-	ctx               context.Context
-	cancel            context.CancelFunc
-	assistantLanguage string
-	language          string
-	openaiClient      common.OpenaiClient
+	audioData    []byte
+	id           uuid.UUID
+	err          error
+	ctx          context.Context
+	cancel       context.CancelFunc
+	language     string
+	openaiClient common.OpenaiClient
 )
 
 // ErrHangup indicates that the call should be terminated or has been terminated
@@ -86,7 +80,6 @@ func listen(ctx context.Context) error {
 
 // Handle processes a call
 func Handle(pCtx context.Context, c net.Conn) {
-	assistantLanguage = os.Getenv("ASSISTANT_LANGUAGE")
 	var transcription string
 
 	ctx, cancel = context.WithTimeout(pCtx, MaxCallDuration)
@@ -99,12 +92,17 @@ func Handle(pCtx context.Context, c net.Conn) {
 	slog.Info("Begin call process", "callId", id.String())
 
 	// Channel to signal end of user speaking
-	userEndSpeaking := make(chan bool)
+	playingAudioCh := make(chan bool, 20)
 	// Channel to send audio data
 	audioDataCh := make(chan []byte)
+	// Channel to detect interrupt
+	audioInterruptCh := make(chan bool, 20)
 
-	defer close(userEndSpeaking)
+	playingAudioCh <- false
+
+	defer close(playingAudioCh)
 	defer close(audioDataCh)
+	defer close(audioInterruptCh)
 
 	// Configure the call timer
 	callTimer := time.NewTimer(MaxCallDuration)
@@ -124,10 +122,9 @@ func Handle(pCtx context.Context, c net.Conn) {
 		default:
 			// Start listening for user speech
 			slog.Debug("receiving audio", "callId", id.String())
-			go processFromAsterisk(cancel, c, userEndSpeaking, audioDataCh)
+			go processFromAsterisk(cancel, c, playingAudioCh, audioDataCh, audioInterruptCh)
 
-			// Wait for user to stop speaking
-			<-userEndSpeaking
+			// Getting audio data from the user
 			audioData = <-audioDataCh
 			slog.Debug("user stopped speaking", "callId", id.String())
 			start := time.Now()
@@ -157,7 +154,7 @@ func Handle(pCtx context.Context, c net.Conn) {
 				go deleteFile(inputAudioFile)
 			}
 
-			if language == "" && os.Getenv("ASSISTANT_TOOL") == "rasa" {
+			if language == "" {
 				language = common.DetectLanguage(transcription)
 				slog.Debug(fmt.Sprintf("detected language: %s", language), "sender", id.String())
 			}
@@ -192,37 +189,52 @@ func Handle(pCtx context.Context, c net.Conn) {
 				}
 				slog.Debug(fmt.Sprintf("completed to create the response in %s", time.Since(start).Round(time.Second).String()), "callId", id.String())
 				go deleteFile(responseAudioFile)
-				sendAudio(c, audioData)
+				go sendAudio(c, audioData, audioInterruptCh, playingAudioCh)
 			}
 		}
 		i++
 	}
 }
 
-func choosePicoTtsLanguage(language string) string {
-	switch language {
-	case "en":
-		return "en-US"
-	case "es":
-		return "es-ES"
-	case "fr":
-		return "fr-FR"
-	case "de":
-		return "de-DE"
-	case "it":
-		return "it-IT"
-	case "pt":
-		return "pt-PT"
-	default:
-		return "en-US"
+// setInterruptChannel sets the interrupt channel to true when the user starts speaking and the response from IA is playing
+func setInterruptChannel(audioInterruptCh chan bool, playingAudioCh chan bool, userBeginSpeakingCh chan bool, done chan bool) {
+	flag1 := false
+	flag2 := false
+	for {
+		select {
+		case playingAudio := <-playingAudioCh:
+			flag1 = playingAudio
+		case uBp := <-userBeginSpeakingCh:
+			flag2 = uBp
+		case <-done:
+			return
+		default:
+			time.Sleep(1000 * time.Millisecond) // Wait until receiving to channels
+		}
+		// If the user starts speaking and the response from IA is playing, set audioInterruptCh to true
+		if flag1 && flag2 {
+			slog.Debug("Recibed true in playingAudio and userBeginSpeaking, setting audioInterruptCh to true", "callId", id.String())
+			audioInterruptCh <- true
+			userBeginSpeakingCh <- false
+		}
 	}
 }
 
-func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking chan bool, audioDataCh chan []byte) {
+// processFromAsterisk processes audio data from the Asterisk server
+func processFromAsterisk(cancel context.CancelFunc, c net.Conn, playingAudioCh chan bool, audioDataCh chan []byte, audioInterruptCh chan bool) {
 	var silenceStart time.Time
 	var messageData []byte
 	detectingSilence := false
 	userBeginSpeaking := false
+	alreadyUserBeginSpeaking := false
+	done := make(chan bool)
+	userBeginSpeakingCh := make(chan bool, 1)
+	userBeginSpeakingCh <- false
+
+	defer close(userBeginSpeakingCh)
+	defer close(done)
+
+	go setInterruptChannel(audioInterruptCh, playingAudioCh, userBeginSpeakingCh, done)
 
 	for {
 		m, err := audiosocket.NextMessage(c)
@@ -237,23 +249,19 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking 
 			return
 		}
 		switch m.Kind() {
-		case audiosocket.KindHangup:
-			slog.Debug("audiosocket received hangup command", "callId", id.String())
-			userEndSpeaking <- true
-			return
 		case audiosocket.KindError:
 			slog.Warn("Packet loss when sending to audiosocket", "callId", id.String())
 		case audiosocket.KindSlin:
 			// Store audio data to send it later in audioDataCh
 			messageData = append(messageData, m.Payload()...)
 			var volume float64
-			// Check if there is audio data, indicating the user is speaking
 			if inputAudioFormat == "g711" {
 				volume = calculateVolumeG711(m.Payload(), inputAudioCodec)
 			} else {
 				volume = calculateVolumePCM16(m.Payload())
 			}
-			fmt.Printf("Volume: %f\n", volume)
+			// Check if volume is bigger than silenceTheshold, indicating the user is speaking
+			// It detects when user starts speaking, so it can interrupt the response from IA
 			if volume < silenceThreshold {
 				if userBeginSpeaking {
 					if !detectingSilence {
@@ -261,130 +269,51 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, userEndSpeaking 
 						detectingSilence = true
 					} else if time.Since(silenceStart) >= silenceDuration {
 						slog.Debug("Detected silence", "callId", id.String())
-						userEndSpeaking <- true
 						audioDataCh <- messageData
 						return
 					}
 				}
 			} else {
-				detectingSilence = false
 				userBeginSpeaking = true
+				if !alreadyUserBeginSpeaking {
+					userBeginSpeakingCh <- true
+					alreadyUserBeginSpeaking = true
+				}
 			}
 		}
 	}
 }
 
-func handleWavFile(filePath string) ([]byte, error) {
-	// Open the input WAV file
-	file, err := os.Open(filePath)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to open input file", slog.Any("error", err), "callId", id.String())
-		return nil, err
-	}
-	defer file.Close()
-
-	// Get the WAV file sample rate
-	header := make([]byte, 44)
-	_, err = file.Read(header)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to read WAV header", slog.Any("error", err), "callId", id.String())
-		return nil, err
-	}
-	wavSampleRate := binary.LittleEndian.Uint32(header[24:28])
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to read file data", slog.Any("error", err), "callId", id.String())
-		return nil, err
-	}
-	_, err = file.Seek(0, io.SeekStart)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to seek file", slog.Any("error", err), "callId", id.String())
-		return nil, err
-	}
-
-	// Create a new resampler to convert the WAV file to PCM 16bit lineat 8kHz Mono
-	var out bytes.Buffer
-
-	resampler, err := resample.New(&out, float64(wavSampleRate), 8000, 1, 3, 6)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to create resampler", slog.Any("error", err), "callId", id.String())
-		return nil, err
-	}
-	_, err = resampler.Write(data[44:])
-	if err != nil {
-		slog.ErrorContext(ctx, "resampling write failed", slog.Any("error", err), "callId", id.String())
-		return nil, err
-	}
-	err = resampler.Close()
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to close resampler", slog.Any("error", err), "callId", id.String())
-		return nil, err
-	}
-
-	return out.Bytes(), nil
-}
-
 // sendAudio sends audio data to the Asterisk server
-func sendAudio(w io.Writer, data []byte) error {
+func sendAudio(w io.Writer, data []byte, audioInterruptCh chan bool, playingAudioCh chan bool) error {
 	var i, chunks int
+	playingAudioCh <- true
 	t := time.NewTicker(20 * time.Millisecond)
 	defer t.Stop()
-
 	for range t.C {
-		if i >= len(data) {
-			return nil
+		select {
+		case audioInterrupt := <-audioInterruptCh:
+			if audioInterrupt {
+				slog.Debug("audio interrupted because user doesn't want to hear me anymore", "callId", id.String())
+				playingAudioCh <- false
+				return nil
+			}
+		default:
+			if i >= len(data) {
+				slog.Debug("audio send finished", "callId", id.String())
+				playingAudioCh <- false
+				return nil
+			}
+			var chunkLen = slinChunkSize
+			if i+slinChunkSize > len(data) {
+				chunkLen = len(data) - i
+			}
+			if _, err := w.Write(audiosocket.SlinMessage(data[i : i+chunkLen])); err != nil {
+				return errors.Wrap(err, "failed to write chunk to audiosocket")
+			}
+			chunks++
+			i += chunkLen
 		}
-		var chunkLen = slinChunkSize
-		if i+slinChunkSize > len(data) {
-			chunkLen = len(data) - i
-		}
-		if _, err := w.Write(audiosocket.SlinMessage(data[i : i+chunkLen])); err != nil {
-			return errors.Wrap(err, "failed to write chunk to audiosocket")
-		}
-		chunks++
-		i += chunkLen
 	}
-	return nil
-}
-
-// saveToWAV saved data into a wav file.
-func saveToWAV(audioData []byte, filename string) error {
-	// Create output file
-	outFile, err := os.Create(filename)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to open output wav file", slog.Any("error", err), "callId", id.String())
-		return err
-	}
-	defer outFile.Close()
-
-	// Create new wav encoder
-	enc := wav.NewEncoder(outFile, 8000, 16, 1, 1)
-
-	// Convert []byte audio data into a format that the WAV encoder can understand
-	buf := &audio.IntBuffer{
-		Format: &audio.Format{
-			SampleRate:  8000,
-			NumChannels: 1,
-		},
-		Data: make([]int, len(audioData)/2),
-	}
-
-	for i := 0; i < len(audioData)/2; i++ {
-		buf.Data[i] = int(int16(audioData[2*i]) | int16(audioData[2*i+1])<<8)
-	}
-
-	// Write the PCM audio data to the WAV encoder
-	if err := enc.Write(buf); err != nil {
-		slog.ErrorContext(ctx, "failed to write audio data to wav encoder", slog.Any("error", err), "callId", id.String())
-		return err
-	}
-
-	// Close the encoder to ensure all data is written
-	if err := enc.Close(); err != nil {
-		slog.ErrorContext(ctx, "failed to close wav encoder", slog.Any("error", err), "callId", id.String())
-		return err
-	}
-
 	return nil
 }
