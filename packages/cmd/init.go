@@ -40,6 +40,19 @@ var prCmd = &cobra.Command{
 		}
 
 		if comChan == "audio" {
+			validateEnv([]string{"AUDIO_FORMAT"})
+			switch os.Getenv("AUDIO_FORMAT") {
+			case "g711":
+				validateEnv([]string{"G711_AUDIO_CODEC"})
+			case "pcm16":
+			default:
+				fmt.Println("Invalid value for variable AUDIO_FORMAT, valid values are g711 and pcm16")
+				os.Exit(1)
+
+			}
+			if os.Getenv("AUDIO_FORMAT") == "g711" {
+				validateEnv([]string{"G711_AUDIO_CODEC"})
+			}
 			audiosocketserver.InitializeServer()
 		} else if comChan == "whatsapp" {
 			validateEnv([]string{"SQL_DB_FILE_NAME"})

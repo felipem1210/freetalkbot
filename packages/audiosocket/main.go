@@ -19,9 +19,7 @@ import (
 )
 
 const (
-	listenAddr       = ":8080"
-	inputAudioFormat = "pcm16" // "g711" or "pcm16"
-	inputAudioCodec  = "ulaw"  // "ulaw" or "alaw"
+	listenAddr = ":8080"
 
 	// slinChunkSize is the number of bytes which should be sent per Slin
 	// audiosocket message.  Larger data will be chunked into this size for
@@ -30,19 +28,21 @@ const (
 	// This is based on 8kHz, 20ms, 16-bit signed linear.
 	slinChunkSize = 320 // 8000Hz * 20ms * 2 bytes
 
-	silenceThreshold = 500             // Silence threshold
-	silenceDuration  = 2 * time.Second // Minimum duration of silence
-	MaxCallDuration  = 2 * time.Minute //  MaxCallDuration is the maximum amount of time to allow a call to be up before it is terminated.
+	silenceDuration = 2 * time.Second // Minimum duration of silence
+	MaxCallDuration = 2 * time.Minute //  MaxCallDuration is the maximum amount of time to allow a call to be up before it is terminated.
 )
 
 var (
-	audioData    []byte
-	id           uuid.UUID
-	err          error
-	ctx          context.Context
-	cancel       context.CancelFunc
-	language     string
-	openaiClient common.OpenaiClient
+	inputAudioFormat string
+	g711AudioCodec   string
+	silenceThreshold float64
+	audioData        []byte
+	id               uuid.UUID
+	err              error
+	ctx              context.Context
+	cancel           context.CancelFunc
+	language         string
+	openaiClient     common.OpenaiClient
 )
 
 // ErrHangup indicates that the call should be terminated or has been terminated
@@ -53,6 +53,15 @@ func InitializeServer() {
 	if os.Getenv("STT_TOOL") == "whisper" {
 		openaiClient = common.CreateOpenAiClient()
 	}
+
+	inputAudioFormat = os.Getenv("AUDIO_FORMAT")
+	if inputAudioFormat == "pcm16" {
+		silenceThreshold = 500
+	} else if inputAudioFormat == "g711" {
+		silenceThreshold = 1000
+		g711AudioCodec = os.Getenv("G711_AUDIO_CODEC")
+	}
+
 	slog.Info(fmt.Sprintf("listening for AudioSocket connections on %s", listenAddr))
 	if err = listen(ctx); err != nil {
 		log.Fatalln("listen failure:", err)
@@ -256,7 +265,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, playingAudioCh c
 			messageData = append(messageData, m.Payload()...)
 			var volume float64
 			if inputAudioFormat == "g711" {
-				volume = calculateVolumeG711(m.Payload(), inputAudioCodec)
+				volume = calculateVolumeG711(m.Payload(), g711AudioCodec)
 			} else {
 				volume = calculateVolumePCM16(m.Payload())
 			}
