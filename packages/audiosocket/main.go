@@ -239,6 +239,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, playingAudioCh c
 	done := make(chan bool)
 	userBeginSpeakingCh := make(chan bool, 1)
 	userBeginSpeakingCh <- false
+	counter := 0
 
 	defer close(userBeginSpeakingCh)
 	defer close(done)
@@ -269,6 +270,7 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, playingAudioCh c
 			} else {
 				volume = calculateVolumePCM16(m.Payload())
 			}
+			fmt.Printf("Volume: %f\n", volume)
 			// Check if volume is bigger than silenceTheshold, indicating the user is speaking
 			// It detects when user starts speaking, so it can interrupt the response from IA
 			if volume < silenceThreshold {
@@ -283,11 +285,14 @@ func processFromAsterisk(cancel context.CancelFunc, c net.Conn, playingAudioCh c
 					}
 				}
 			} else {
-				userBeginSpeaking = true
-				if !alreadyUserBeginSpeaking {
-					userBeginSpeakingCh <- true
-					alreadyUserBeginSpeaking = true
+				if counter > 15 {
+					userBeginSpeaking = true
+					if !alreadyUserBeginSpeaking {
+						userBeginSpeakingCh <- true
+						alreadyUserBeginSpeaking = true
+					}
 				}
+				counter++
 			}
 		}
 	}
